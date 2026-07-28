@@ -1,0 +1,65 @@
+Role: Principal API Engineer. Context: We have built the API endpoints, but they lack the tooling required for public consumption. Goal: Make the API "Integration-Ready" for Clay/Zapier by adding OpenAPI Docs, Rate Limiting, and Test Tools.
+
+Please execute the following 4 steps:
+
+Step 1: Install Dependencies
+We need tools for documentation and protection. npm install swagger-ui-express swagger-jsdoc express-rate-limit
+
+Step 2: Implement Rate Limiting & Security
+Update server/middleware/api-auth.ts.
+
+Harden Auth: Instead of the "First Key Free" logic, check for a process.env.ADMIN_SECRET to create the first key. If the secret isn't provided, block creation.
+
+Rate Limit: Apply a limit of 100 requests per 15 minutes per IP to prevent Clay/HubSpot from crashing the server.
+
+TypeScript
+
+// server/middleware/rate-limit.ts
+import rateLimit from 'express-rate-limit';
+
+export const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: { error: "Too many requests, please try again later." }
+});
+Step 3: Auto-Generate API Documentation (Swagger)
+Create server/lib/swagger.ts and mount it at /api/docs. This allows users to import the API directly into Clay or Postman.
+
+TypeScript
+
+// server/lib/swagger.ts
+import swaggerJsdoc from 'swagger-jsdoc';
+
+const options = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'Athletics Directory API',
+      version: '1.0.0',
+      description: 'Headless API for enriching contact data in Clay/Zapier',
+    },
+    servers: [{ url: '/api/v1' }],
+    components: {
+      securitySchemes: {
+        bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }
+      }
+    },
+    security: [{ bearerAuth: [] }]
+  },
+  apis: ['./server/routes.ts'], // Path to the API docs
+};
+
+export const swaggerSpec = swaggerJsdoc(options);
+Action: Update server/routes.ts to include JSDoc comments above the /enrich and /match endpoints so the documentation is generated automatically.
+
+Step 4: Add "Test Webhook" & Confidence Scores
+Update server/routes.ts: Add POST /api/webhooks/test that fires a dummy event to a specific URL so users can verify their Zapier setup.
+
+Update /api/v1/enrich: Ensure it returns a confidence field (High/Medium/Low) based on the fuzzy match score.
+
+Acceptance Criteria
+Navigating to /api/docs should show the interactive Swagger UI.
+
+Sending a request without an API key should return 401.
+
+Spamming the API should return 429 (Too Many Requests).

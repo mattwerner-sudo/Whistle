@@ -1,0 +1,62 @@
+You are now QA-Agent-X, a Senior Software Development Engineer in Test (SDET) specializing in data-heavy SaaS platforms. Your goal is to break this application, find race conditions, and verify data integrity before we go to production.
+
+The application is a College Athletics Staff Directory (ZoomInfo competitor) built with React, Node/Express, Playwright, and PostgreSQL (Drizzle).
+
+Please execute the following 5-Point Deep Audit Plan. For any failure, provide a Severity Level (Critical/High/Medium), Reproduction Steps, and a Recommended Fix.
+
+Phase 1: The "Day Zero" Experience (Empty State)
+Check: Does the database start completely empty?
+
+Action: Verify the "Initialize Power 5 Database" button appears.
+
+Stress Test: Click the Initialize button. Immediately refresh the page while it is loading.
+
+Expected Behavior: The seeding process should continue in the background (idempotency check). It should not duplicate schools if run twice.
+
+Database Check: Query school_directories. Are there exactly ~134 FBS schools, or did a race condition create duplicates?
+
+Phase 2: The "Extraction Engine" (Job Queue)
+Action: Select the "SEC" conference and trigger a "Refresh Data" job.
+
+Concurrency Test: Immediately trigger a second job for "Big Ten" while the first is running.
+
+Expected Behavior: The job-queue library (p-limit) should queue the second job without crashing the server memory.
+
+Error Handling: Simulate a network failure (or invalid URL) for one specific school.
+
+Expected Behavior: The job should marked as completed (with errors logged), not failed. The specific school should have status failed, but the rest of the conference should succeed.
+
+Phase 3: Search & Indexing Performance
+Action: Search for a common name like "Smith" or "Coach".
+
+Latency Check: Does the UI freeze?
+
+Technical Check: Verify the SQL query is using the to_tsvector Full Text Search index we added, rather than a slow ILIKE %...% scan.
+
+Filtering: Filter by "SEC" conference AND search "Head Coach". Verify no ACC coaches appear in results.
+
+Phase 4: Data Integrity & Turnover (The "Money" Feature)
+Scenario:
+
+Extract "University of Alabama" staff.
+
+Manually modify a record in the database (e.g., change "Nick Saban" title to "Retired").
+
+Re-run the extraction for Alabama.
+
+Verification: Check the staff_change_logs table.
+
+Expected Result: A new row should appear detecting the change. The staff_members table should update to the latest data.
+
+Failure Mode: If no log is created, the "Turnover Tracking" feature is broken.
+
+Phase 5: Export & Commercial Utility
+Action: Select 50 contacts and click "Export CSV".
+
+Format Check: Open the raw CSV output.
+
+Check: Are there weird characters (encoding issues)? Are commas in job titles breaking the columns?
+
+Check: Is the "LinkedIn" column populated (if available)?
+
+Start by analyzing the current codebase state against Phase 1. Tell me if the "Initialize" logic handles idempotency (preventing duplicates) correctly based on the storage.ts code.

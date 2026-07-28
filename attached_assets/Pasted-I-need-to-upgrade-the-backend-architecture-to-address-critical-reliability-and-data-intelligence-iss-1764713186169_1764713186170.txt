@@ -1,0 +1,268 @@
+I need to upgrade the backend architecture to address critical reliability and data intelligence issues. We need to move from a simple request-response model to a Worker Pool Architecture with Change Tracking.
+
+Shutterstock
+Explore
+
+Please execute the following 6 steps:
+
+Step 1: Install Dependencies
+We need a concurrency limit library to manage our worker pool without crashing the server. npm install p-limit
+
+Step 2: Update Database Schema for History Tracking
+Update shared/schema.ts to include a staff_change_logs table. This allows us to track when staff are hired, fired, or promoted (The "Turnover" feature).
+
+TypeScript
+
+// Add to shared/schema.ts
+
+// ... existing tables ...
+
+// NEW: Staff Change Log (Turnover Tracking)
+export const staffChangeLogs = pgTable("staff_change_logs", {
+  id: serial("id").primaryKey(),
+  schoolId: text("school_id").notNull(),
+  staffId: integer("staff_id"), // Link to staff_members if they still exist
+  name: text("name").notNull(), // Keep name in case record is deleted
+  changeType: text("change_type").notNull(), // 'new_hire', 'departure', 'title_change', 'promotion'
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  detectedAt: timestamp("detected_at").defaultNow().notNull(),
+});
+
+export const insertStaffChangeLogSchema = createInsertSchema(staffChangeLogs);
+export type StaffChangeLog = typeof staffChangeLogs.$inferSelect;
+Step 3: Create the Browser Pool (Performance)
+Create server/lib/browser-pool.ts. Instead of launching a new Chrome browser for every request (which kills memory), we will keep one "Global Browser" open and just create lightweight "Pages" for each job.
+
+TypeScript
+
+// server/lib/browser-pool.ts
+import { chromium, Browser, BrowserContext } from "playwright";
+
+let globalBrowser: Browser | null = null;
+let lastUsed = Date.now();
+const IDLE_TIMEOUT = 1000 * 60 * 5; // Close browser after 5 mins of idle
+
+export async function getBrowserPage() {
+  if (!globalBrowser) {
+    console.log("[BrowserPool] Launching new Global Browser...");
+    globalBrowser = await chromium.launch({ 
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'] 
+    });
+    
+    // Auto-cleanup interval
+    setInterval(checkIdle, 60000);
+  }
+  
+  lastUsed = Date.now();
+  const context = await globalBrowser.newContext({
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+  });
+  
+  return context.newPage();
+}
+
+async function checkIdle() {
+  if (globalBrowser && Date.now() - lastUsed > IDLE_TIMEOUT) {
+    console.log("[BrowserPool] Browser idle. Closing to save RAM.");
+    await globalBrowser.close();
+    globalBrowser = null;
+  }
+}
+Step 4: Create the Job Queue (Reliability)
+Create server/lib/job-queue.ts. This manages the extraction jobs so that if 50 users click "Extract", we don't crash. It limits concurrent processing to 3 jobs at a time.
+
+TypeScript
+
+// server/lib/job-queue.ts
+import pLimit from 'p-limit';
+import { storage } from "../storage";
+import { extractStaffFromUrl, convertToStaffMembers } from "../staffExtractor";
+import { discoverDirectoryUrl } from "../staffExtractor";
+
+// Concurrency Limit: Only run 3 extractions at once
+const limit = pLimit(3);
+
+export async function queueJob(jobId: number) {
+  // Wrap the processing logic in the limiter
+  limit(async () => {
+    console.log(`[JobQueue] Starting execution for Job #${jobId}`);
+    try {
+      await processExtractionJob(jobId);
+    } catch (err) {
+      console.error(`[JobQueue] Unhandled error in Job #${jobId}`, err);
+    }
+  });
+}
+
+async function processExtractionJob(jobId: number) {
+  // 1. Fetch Job
+  const job = await storage.getExtractionJob(jobId);
+  if (!job || job.status === 'completed') return;
+
+  await storage.updateExtractionJob(jobId, { status: "processing" });
+
+  // 2. Resolve Targets (Schools)
+  let targetSchools: string[] = [];
+  if (job.type === 'conference' && job.targetId) {
+    const allSchools = await storage.getSchoolDirectories({ conference: job.targetId, limit: 1000 });
+    targetSchools = allSchools.directories.map(s => s.schoolId);
+  } else if (job.type === 'single' && job.targetId) {
+    targetSchools = [job.targetId];
+  } else if (job.type === 'bulk') {
+    const pending = await storage.getSchoolDirectories({ status: 'pending', limit: 20 });
+    targetSchools = pending.directories.map(d => d.schoolId);
+  }
+
+  await storage.updateExtractionJob(jobId, { totalSchools: targetSchools.length });
+
+  // 3. Process Loop
+  let processed = 0;
+  let contactsFound = 0;
+  const logs: string[] = [];
+
+  for (const schoolId of targetSchools) {
+    try {
+      let directory = await storage.getSchoolDirectory(schoolId);
+      if (!directory) continue;
+
+      // Smart URL Discovery
+      let url = directory.directoryUrl;
+      if (!url) {
+        logs.push(`Discovering URL for ${schoolId}...`);
+        url = await discoverDirectoryUrl(directory.ncaaUrl, directory.schoolName);
+        if (url) await storage.upsertSchoolDirectory({ ...directory, directoryUrl: url });
+      }
+
+      if (!url) {
+        logs.push(`Skipped ${schoolId}: No directory URL`);
+        await storage.updateSchoolDirectoryStatus(schoolId, "no_directory");
+        continue;
+      }
+
+      // Extract
+      const result = await extractStaffFromUrl(url);
+      
+      // LOGIC: Turnover Detection would go here (Compare existing vs new)
+      // For now, we utilize the bulk upsert
+      if (result.contacts.length > 0) {
+        const members = convertToStaffMembers(result.contacts, schoolId);
+        await storage.bulkUpsertStaffMembers(members);
+        
+        // Update Stats
+        await storage.upsertSchoolDirectory({
+          ...directory,
+          status: "success",
+          contactsCount: result.contacts.length,
+          avgConfidence: result.diagnostics.averageConfidence,
+          lastExtractedAt: new Date(),
+        });
+        
+        contactsFound += result.contacts.length;
+        logs.push(`Extracted ${result.contacts.length} from ${schoolId}`);
+      } else {
+        logs.push(`No contacts found for ${schoolId}`);
+      }
+      
+    } catch (e: any) {
+      console.error(`Error ${schoolId}:`, e);
+      logs.push(`Error ${schoolId}: ${e.message}`);
+    }
+
+    processed++;
+    // Update Progress
+    if (processed % 2 === 0 || processed === targetSchools.length) {
+      await storage.updateExtractionJob(jobId, { 
+        processedSchools: processed, 
+        contactsFound, 
+        logs: logs.slice(-20) 
+      });
+    }
+  }
+
+  await storage.updateExtractionJob(jobId, { status: "completed", logs });
+}
+Step 5: Update Scraper to use Browser Pool
+Update server/staffExtractor.ts. Replace the standard fetch or local Playwright launch with our new getBrowserPage.
+
+TypeScript
+
+// Update imports
+import { getBrowserPage } from "./lib/browser-pool";
+// ... other imports
+
+// Replace the fetchHtml / extract function logic
+export async function extractStaffFromUrl(url: string): Promise<ExtractionResult> {
+  let page = null;
+  try {
+    // USE THE POOL
+    page = await getBrowserPage();
+    
+    // Robust Navigation
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    
+    // Auto-scroll to trigger lazy loading (Critical for Sidearm sites)
+    await page.evaluate(async () => {
+      await new Promise<void>((resolve) => {
+        let totalHeight = 0;
+        const distance = 100;
+        const timer = setInterval(() => {
+          const scrollHeight = document.body.scrollHeight;
+          window.scrollBy(0, distance);
+          totalHeight += distance;
+          if(totalHeight >= scrollHeight) {
+            clearInterval(timer);
+            resolve();
+          }
+        }, 100);
+      });
+    });
+
+    const html = await page.content();
+    return parseHtmlForContacts(html); // Your existing parser
+    
+  } catch (e) {
+    console.error("Extraction error:", e);
+    return { 
+      contacts: [], 
+      diagnostics: { 
+        totalEmailLinksFound: 0, cloudflareEmailsFound: 0, mailtoLinksFound: 0, 
+        containersDetected: 0, contactsExtracted: 0, averageConfidence: 0, 
+        failureReason: String(e) 
+      } 
+    };
+  } finally {
+    // Close the PAGE, not the browser
+    if (page) await page.close();
+  }
+}
+Step 6: Connect Routes to the Queue
+Update server/routes.ts to use queueJob instead of the local function.
+
+TypeScript
+
+// Update imports
+import { queueJob } from "./lib/job-queue";
+
+// Inside registerRoutes...
+// Update the POST /api/jobs endpoint
+app.post("/api/jobs", async (req, res) => {
+  try {
+    const jobData = createJobSchema.parse(req.body);
+    
+    const job = await storage.createExtractionJob({
+      type: jobData.type,
+      targetId: jobData.targetId,
+      status: "pending",
+      logs: ["Job queued"]
+    });
+
+    // Pass to the Queue Manager
+    queueJob(job.id);
+
+    res.json(job);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});

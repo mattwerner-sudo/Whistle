@@ -1,0 +1,73 @@
+# Curated staff-directory URLs used by tests/parser-strategy-audit.ts to
+# collect *real-world* selector-usage evidence for the Presto / WordPress /
+# Table parsers. We include a mix of (a) sites the auto-detector routes to
+# those parsers and (b) high-traffic Sidearm sites — the audit forces each
+# strategy onto every HTML body so we learn which configured selectors
+# actually fire on real pages, not just on pages the detector picked.
+
+# --- Sites that auto-fingerprint as WordPress (Power-5 with WP build) ---
+https://arkansasrazorbacks.com/staff-directory
+https://fightingirish.com/staff-directory
+https://gamecocksonline.com/staff-directory
+https://hurricanesports.com/staff-directory
+https://lsusports.net/staff-directory
+https://ramblinwreck.com/staff-directory
+https://ukathletics.com/staff-directory
+https://vucommodores.com/staff-directory
+https://12thman.com/staff-directory
+
+# --- Sites that auto-fingerprint as Presto ---
+https://hawkeyesports.com/staff-directory
+
+# --- Power-5 Sidearm sites (forced shadow-parse for presto/wp/table evidence) ---
+https://rolltide.com/staff-directory
+https://auburntigers.com/staff-directory
+https://floridagators.com/staff-directory
+https://georgiadogs.com/staff-directory
+https://mutigers.com/staff-directory
+https://olemisssports.com/staff-directory
+https://hailstate.com/staff-directory
+https://utsports.com/staff-directory
+https://fightingillini.com/staff-directory
+https://iuhoosiers.com/staff-directory
+https://gophersports.com/staff-directory
+https://huskers.com/staff-directory
+https://nusports.com/staff-directory
+https://ohiostatebuckeyes.com/staff-directory
+https://gopsusports.com/staff-directory
+https://purduesports.com/staff-directory
+https://scarletknights.com/staff-directory
+https://uwbadgers.com/staff-directory
+https://msuspartans.com/staff-directory
+https://umterps.com/staff-directory
+https://bceagles.com/staff-directory
+https://clemsontigers.com/staff-directory
+https://goduke.com/staff-directory
+https://seminoles.com/staff-directory
+https://gocards.com/staff-directory
+https://gopack.com/staff-directory
+https://goheels.com/staff-directory
+https://pittsburghpanthers.com/staff-directory
+https://cuse.com/staff-directory
+https://virginiasports.com/staff-directory
+https://hokiesports.com/staff-directory
+https://wakeforestsports.com/staff-directory
+https://thesundevils.com/staff-directory
+https://calbears.com/staff-directory
+https://cubuffs.com/staff-directory
+https://gostanford.com/staff-directory
+https://uclabruins.com/staff-directory
+https://usctrojans.com/staff-directory
+https://utahutes.com/staff-directory
+
+# --- Smaller / Ivy / Patriot / CAA Sidearm sites (more variety) ---
+https://goprincetontigers.com/staff-directory
+https://gocrimson.com/staff-directory
+https://yalebulldogs.com/staff-directory
+https://brownbears.com/staff-directory
+https://cornellbigred.com/staff-directory
+https://fordhamsports.com/staff-directory
+https://denisonbigred.com/staff-directory
+https://godrakebulldogs.com/staff-directory
+https://rpiathletics.com/staff-directory
+https://athletics.wesleyan.edu/staff-directory

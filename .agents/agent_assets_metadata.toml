@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "mIz566GDu3InRjMBSinXD"
+uri = "file://dist/whistle-code.zip"
+type = "unspecified"
+title = "Whistle source code (zip)"

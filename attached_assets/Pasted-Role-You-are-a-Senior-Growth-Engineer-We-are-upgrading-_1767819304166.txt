@@ -1,0 +1,104 @@
+Role: You are a Senior Growth Engineer. We are upgrading the app to an ABM 2.0 Signal Engine (inspired by Seam.ai).
+
+Goal: Move beyond static contact info. We need to map Relationships (Career History) and Technographics (Software Usage) to generate high-intent sales signals.
+
+Please execute the following 4 steps to build the Signal Engine:
+
+Step 1: The "Graph" Schema (Career History)
+Update shared/schema.ts. We need to track where people worked before, not just where they are now.
+
+TypeScript
+
+// shared/schema.ts
+
+// 1. Career History Table (The Graph Edge)
+export const careerHistory = pgTable("career_history", {
+  id: serial("id").primaryKey(),
+  staffId: integer("staff_id").notNull(), // Link to the person
+  schoolId: text("school_id").notNull(),  // Where they worked
+  title: text("title"),                   // What they did
+  startYear: integer("start_year"),
+  endYear: integer("end_year"),
+  technologiesUsed: jsonb("technologies_used").$type<string[]>(), // e.g. ["Catapult", "Teamworks"]
+});
+
+// 2. Technographic Signals (The "Tech Stack" Scanner)
+// We already added 'techStack' to schools, but we need 'tech_signals' for alerts.
+export const signals = pgTable("signals", {
+  id: serial("id").primaryKey(),
+  schoolId: text("school_id"),
+  type: text("type").notNull(), // 'new_hire', 'tech_drop', 'tech_add'
+  description: text("description"), // "Dropped Ticketmaster for Paciolan"
+  detectedAt: timestamp("detected_at").defaultNow(),
+  isActioned: boolean("is_actioned").default(false), // Has the user used this signal?
+});
+
+export const insertCareerSchema = createInsertSchema(careerHistory);
+Step 2: The "Coaching Tree" Resolver
+Create server/lib/graph-engine.ts. This logic finds connections between schools.
+
+Logic to Implement:
+
+Input: targetSchoolId (The account you want to sell to).
+
+Query: Find any staff at targetSchoolId who previously worked at knownCustomerSchools (List of schools that already love you).
+
+Output: A list of "Warm Paths" (e.g., "Coach Smith at Target School used your product at Alabama in 2022").
+
+TypeScript
+
+// server/lib/graph-engine.ts
+import { db } from "../db";
+import { careerHistory, staffMembers } from "@shared/schema";
+import { eq, and, inArray } from "drizzle-orm";
+
+export async function findWarmPaths(targetSchoolId: string, customerSchoolIds: string[]) {
+  // 1. Get all staff at target school
+  const targetStaff = await db.select().from(staffMembers).where(eq(staffMembers.schoolId, targetSchoolId));
+  const targetStaffIds = targetStaff.map(s => s.id);
+
+  // 2. Check their history for matches with customer schools
+  const warmLeads = await db.select()
+    .from(careerHistory)
+    .where(and(
+      inArray(careerHistory.staffId, targetStaffIds),
+      inArray(careerHistory.schoolId, customerSchoolIds)
+    ));
+
+  return warmLeads.map(lead => ({
+    staffId: lead.staffId,
+    previousSchool: lead.schoolId,
+    signal: "Former User"
+  }));
+}
+Step 3: The "Displacement" Scraper
+Update server/staffExtractor.ts. Enhance the Technographic detection to identify Churn Risk.
+
+Logic:
+
+Store the previous scrape's Tech Stack.
+
+Compare with current scrape.
+
+If Teamworks disappears and Arms appears, create a Signal entry: "Competitor Switch Detected".
+
+Step 4: The "Signal Feed" Dashboard
+Create client/src/pages/signals.tsx.
+
+View: A feed of "High Intent" events.
+
+Cards:
+
+🚀 New Hire: "New AD at Texas A&M (Came from Alabama)."
+
+🔄 Tech Change: "Oregon dropped Sidearm Sports."
+
+🤝 Warm Path: "3 Coaches at Florida used your product at their last job."
+
+Action: A "Draft Email" button that uses AI to write a message referencing that specific signal.
+
+Prompt for the AI Email Draft (to be used in the button):
+
+"Write a sales email to [Name]. Mention that we saw they previously worked at [Old School] where they used [Our Product]. Congratulate them on the new role at [New School]."
+
+Please build these components to transform the directory into an Intelligence Engine.
