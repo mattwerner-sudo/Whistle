@@ -1,0 +1,3 @@
+- [Testing conventions](testing-conventions.md) — tests/ are plain tsx scripts (npx tsx), NOT jest; top-level-await scripts must live inside the workspace (ESM) — /tmp or `tsx -e` compile as CJS and fail.
+- [Stripe off-session PAYG charges](stripe-offsession-payg.md) — PAYG charges must pass explicit payment_method (setup-mode doesn't set a default); plus stripe-replit-sync has no getWebhookSecret().
+- [Frontend component tests](frontend-component-tests.md) — how to render real React pages in tsx scripts via jsdom (no test runner); gotchas: expose React global, stub fetch, custom wouter searchHook.
