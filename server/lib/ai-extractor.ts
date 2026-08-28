@@ -89,7 +89,7 @@ ${truncatedHtml}
 `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp",
+      model: "gemini-2.5-flash",
       contents: prompt,
     });
 
@@ -289,7 +289,7 @@ Area definitions:
 `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp",
+      model: "gemini-2.5-flash",
       contents: prompt,
     });
 
@@ -443,7 +443,7 @@ Return an empty array [] if no tags apply.
 `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp",
+      model: "gemini-2.5-flash",
       contents: prompt,
     });
 

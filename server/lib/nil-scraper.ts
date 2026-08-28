@@ -8,10 +8,11 @@
  * Or exposed as an admin endpoint for one-time seeding.
  */
 import { chromium } from "playwright";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { db } from "../db";
 import { nilCollectives, schoolDirectories } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { htmlToTextForAI } from "./html-to-text";
 
 let genAI: GoogleGenAI | null = null;
 function getGenAI(): GoogleGenAI | null {
@@ -32,26 +33,47 @@ async function extractCollectivesFromHtml(html: string): Promise<CollectiveRecor
   const ai = getGenAI();
   if (!ai) return [];
 
-  const truncated = html.substring(0, 10000);
-  const prompt = `Extract NIL collective information from this HTML.
+  // Stripped text, not raw HTML — see htmlToTextForAI for why.
+  const pageText = htmlToTextForAI(html);
+  const prompt = `Extract NIL collective information from this page text.
+Links appear inline as "text (url)". Return every collective found; an empty
+list if there are none.
 
-Return a JSON array:
-[{"name":"collective name","school":"associated university or college","website":"URL if found or null","structure":"nonprofit|llc|unknown","estimatedBudget":"dollar amount string if mentioned or null"}]
-
-Return ONLY the JSON array. No markdown. No explanation. If nothing found, return [].
-
-HTML:
-${truncated}`;
+PAGE TEXT:
+${pageText}`;
 
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            collectives: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  school: { type: Type.STRING },
+                  website: { type: Type.STRING },
+                  structure: { type: Type.STRING, enum: ["nonprofit", "llc", "unknown"] },
+                  estimatedBudget: { type: Type.STRING },
+                },
+                required: ["name", "school"],
+              },
+            },
+          },
+          required: ["collectives"],
+        },
+      },
     });
-    const text = (response.text ?? "").trim().replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(text);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
+    const parsed = JSON.parse(response.text ?? "");
+    return Array.isArray(parsed?.collectives) ? parsed.collectives : [];
+  } catch (err) {
+    console.error("[NilScraper] Gemini extraction failed:", err);
     return [];
   }
 }

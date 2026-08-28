@@ -2,7 +2,7 @@ import { db } from "../db";
 import { careerHistory, staffMembers, signals, schoolDirectories } from "@shared/schema";
 import { eq, and, inArray, desc, sql, gte } from "drizzle-orm";
 import { dispatchSignalAlerts } from "./alert-subscriptions";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 let genAI: GoogleGenAI | null = null;
 function getGenAI(): GoogleGenAI | null {
@@ -26,16 +26,27 @@ Score the sales relevance of this signal from 0 to 100, where:
 - 50 = moderately relevant (worth noting)
 - 100 = extremely relevant (new AD, major tech decision, large hiring wave)
 
-Return ONLY a JSON object: {"score": <number>, "reason": "<one sentence>"}
-No markdown. No explanation outside the JSON.`;
+Return the score and a one-sentence reason.`;
 
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
+      config: {
+        // Structured output: the model is constrained to this shape, so a
+        // malformed reply can't silently masquerade as "no result".
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            score: { type: Type.NUMBER },
+            reason: { type: Type.STRING },
+          },
+          required: ["score", "reason"],
+        },
+      },
     });
-    const text = (response.text ?? "").trim().replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(response.text ?? "");
     const score = Number(parsed.score);
     if (isNaN(score)) return;
 

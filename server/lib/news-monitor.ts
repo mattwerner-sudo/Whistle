@@ -8,10 +8,10 @@
  * can be distinguished from scrape-detected signals in the UI.
  */
 import RSSParser from "rss-parser";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { db } from "../db";
 import { staffMembers, signals } from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, gte } from "drizzle-orm";
 import { dispatchSignalAlerts } from "./alert-subscriptions";
 
 const parser = new RSSParser();
@@ -42,24 +42,43 @@ Does this article report a staff change at a college athletic department?
 Title: ${title}
 Snippet: ${snippet}
 
-If YES, respond with a JSON object:
-{"change_type":"new_hire"|"departure"|"title_change"|"job_posting","person_name":"Name or null","old_role":"old job title or null","new_role":"new job title or null","school_name":"university name or null"}
-
-If NO staff change is reported, respond with exactly: null
-
-Respond ONLY with valid JSON or the word null. No explanation.`;
+Set is_staff_change to false if no staff change is reported. If one is,
+set is_staff_change to true and fill in the change details (omit any field
+you cannot determine).`;
 
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
+      config: {
+        // Structured output: "no match" is a typed field, not a magic string,
+        // so a malformed reply can't be confused with a genuine no-result.
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            is_staff_change: { type: Type.BOOLEAN },
+            change_type: { type: Type.STRING, enum: ["new_hire", "departure", "title_change", "job_posting"] },
+            person_name: { type: Type.STRING },
+            old_role: { type: Type.STRING },
+            new_role: { type: Type.STRING },
+            school_name: { type: Type.STRING },
+          },
+          required: ["is_staff_change"],
+        },
+      },
     });
-    const text = (response.text ?? "").trim().replace(/```json|```/g, "").trim();
-    if (text === "null" || !text) return null;
-    const parsed = JSON.parse(text);
-    if (!parsed?.change_type) return null;
-    return parsed as NewsSignal;
-  } catch {
+    const parsed = JSON.parse(response.text ?? "");
+    if (!parsed?.is_staff_change || !parsed.change_type) return null;
+    return {
+      change_type: parsed.change_type,
+      person_name: parsed.person_name ?? null,
+      old_role: parsed.old_role ?? null,
+      new_role: parsed.new_role ?? null,
+      school_name: parsed.school_name ?? null,
+    } as NewsSignal;
+  } catch (err) {
+    console.error("[NewsMonitor] Gemini classification failed:", err);
     return null;
   }
 }
@@ -98,7 +117,11 @@ export async function monitorNewsForSchool(schoolId: string, schoolName: string)
     const signal = await classifyArticleWithGemini(title, snippet);
     if (!signal) continue;
 
-    // Check if we already have a very recent signal of this type for this school
+    // Skip if a signal of this type fired for this school within the last
+    // 6 hours (avoids duplicating scrape-detected vs news-detected signals
+    // for the same event). The window matters: without it, one historical
+    // signal would silence this school+type forever.
+    const dedupeCutoff = new Date(Date.now() - 6 * 60 * 60 * 1000);
     const recentSignal = await db
       .select({ id: signals.id })
       .from(signals)
@@ -106,12 +129,11 @@ export async function monitorNewsForSchool(schoolId: string, schoolName: string)
         and(
           eq(signals.schoolId, schoolId),
           eq(signals.type, signal.change_type),
+          gte(signals.detectedAt, dedupeCutoff),
         ),
       )
       .limit(1);
 
-    // Skip if we just created a signal of the same type within 6 hours
-    // (avoids duplicating scrape-detected vs news-detected signals for the same event)
     if (recentSignal.length > 0) continue;
 
     // Try to match person to existing staff member

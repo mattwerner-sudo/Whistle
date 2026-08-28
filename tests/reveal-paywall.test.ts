@@ -138,32 +138,34 @@ try {
     check("remainingMonthlyReveals reflects allocation", r.status === "ok" && r.remainingMonthlyReveals === 139);
   }
 
-  // --- 3. Stripe customer, no credits, no sub -> PAYG metering path ---
-  console.log("\nStripe customer with no credits goes through PAYG metering:");
+  // --- 3. No active subscription -> blocked (annual-only model, PAYG removed) ---
+  // PAYG was removed from the pricing model deliberately: reveals require an
+  // active pro/team/enterprise subscription; anything else is refused with
+  // out_of_quota + upgradeRequired, and Stripe is never metered.
+  console.log("\nnon-subscriber is blocked and never metered:");
   {
     const userId = await makeUser({
       subscriptionStatus: "inactive",
-      subscriptionTier: "payg",
+      subscriptionTier: null,
       monthlyCreditsAllocation: 0,
       creditsUsedThisPeriod: 0,
       creditsBalance: 0,
-      stripeCustomerId: "cus_test_payg",
+      stripeCustomerId: "cus_test_nosub",
     });
     const { deps, calls } = fakeDeps();
     const r = await revealContact({ userId, staffId }, deps);
-    check("returns ok", r.status === "ok");
-    check("source is payg", r.status === "ok" && r.source === "payg");
-    check("meters exactly one Stripe charge", calls.length === 1);
-    check("meters the PAYG per-reveal rate", calls[0]?.amountCents === 90 && calls[0]?.source === "payg");
-    check("uses the customer's Stripe id", calls[0]?.stripeCustomerId === "cus_test_payg");
+    check("is refused", r.status === "error");
+    check("refusal code is out_of_quota", r.status === "error" && r.code === "out_of_quota");
+    check("prompts an upgrade", r.status === "error" && r.upgradeRequired === true);
+    check("never meters Stripe", calls.length === 0);
     const [u] = await db.select().from(users).where(eq(users.id, userId));
-    check("does not deduct a prepaid credit (none to burn)", (u?.creditsBalance ?? 0) === 0);
+    check("does not touch usage counters", (u?.creditsUsedThisPeriod ?? 0) === 0);
   }
 
-  // --- 3b. Freshly set-up PAYG user (status active + tier payg) still meters ---
-  // Mirrors the exact state the payg_setup webhook leaves a user in. Guards
-  // against this being mistaken for a subscription allowance and blocked.
-  console.log("\nfreshly set-up PAYG user (active + payg) meters the per-reveal charge:");
+  // --- 3b. Stale/unknown tier with active status is still blocked ---
+  // Guards against a leftover 'payg' tier value in the users table being
+  // mistaken for a subscription after the PAYG removal.
+  console.log("\nactive status with a non-plan tier is still blocked:");
   {
     const userId = await makeUser({
       subscriptionStatus: "active",
@@ -171,15 +173,13 @@ try {
       monthlyCreditsAllocation: 0,
       creditsUsedThisPeriod: 0,
       creditsBalance: 0,
-      stripeCustomerId: "cus_test_payg_active",
+      stripeCustomerId: "cus_test_stale_tier",
     });
     const { deps, calls } = fakeDeps();
     const r = await revealContact({ userId, staffId }, deps);
-    check("returns ok", r.status === "ok");
-    check("source is payg (not subscription)", r.status === "ok" && r.source === "payg");
-    check("meters exactly one Stripe charge", calls.length === 1);
-    check("meters the PAYG per-reveal rate", calls[0]?.amountCents === 90 && calls[0]?.source === "payg");
-    check("uses the customer's Stripe id", calls[0]?.stripeCustomerId === "cus_test_payg_active");
+    check("is refused", r.status === "error");
+    check("refusal code is out_of_quota", r.status === "error" && r.code === "out_of_quota");
+    check("never meters Stripe", calls.length === 0);
   }
 
   // --- 4. Cached re-reveal within 90 days is free ---
@@ -258,15 +258,19 @@ try {
     check("returns ok", r.status === "ok");
     check("source is overage", r.status === "ok" && r.source === "overage");
     check("meters exactly one Stripe charge", calls.length === 1);
-    check("meters the Team overage rate (40c)", calls[0]?.amountCents === 40 && calls[0]?.source === "overage");
+    check("meters the Team overage rate (35c)", calls[0]?.amountCents === 35 && calls[0]?.source === "overage");
   }
 
-  // --- 6. Prepaid credit balance -> "payg" burns a credit, no Stripe meter ---
-  console.log("\nuser with prepaid credits burns one credit (no Stripe meter):");
+  // --- 6. Prepaid credit balance no longer grants reveals (PAYG removed) ---
+  // Legacy users may still carry a creditsBalance from the old prepaid model.
+  // The reveal path deliberately ignores it: without an active subscription
+  // the reveal is refused, the balance is untouched, and no ledger row is
+  // written. Guards against zombie prepaid logic returning.
+  console.log("\nlegacy prepaid balance without a subscription is refused:");
   {
     const userId = await makeUser({
       subscriptionStatus: "inactive",
-      subscriptionTier: "payg",
+      subscriptionTier: null,
       monthlyCreditsAllocation: 0,
       creditsUsedThisPeriod: 0,
       creditsBalance: 3,
@@ -274,17 +278,16 @@ try {
     });
     const { deps, calls } = fakeDeps();
     const r = await revealContact({ userId, staffId }, deps);
-    check("returns ok", r.status === "ok");
-    check("source is payg", r.status === "ok" && r.source === "payg");
-    check("does not meter Stripe (burns prepaid credit)", calls.length === 0);
-    check("reports the remaining balance", r.status === "ok" && r.creditsBalance === 2);
+    check("is refused", r.status === "error");
+    check("refusal code is out_of_quota", r.status === "error" && r.code === "out_of_quota");
+    check("never meters Stripe", calls.length === 0);
     const [u] = await db.select().from(users).where(eq(users.id, userId));
-    check("decrements creditsBalance by 1", (u?.creditsBalance ?? 0) === 2);
+    check("prepaid balance is untouched", (u?.creditsBalance ?? 0) === 3);
     const txns = await db
       .select()
       .from(creditTransactions)
       .where(eq(creditTransactions.userId, userId));
-    check("records a -1 payg credit transaction", txns.length === 1 && txns[0]?.amount === -1);
+    check("writes no credit transaction", txns.length === 0);
   }
 } finally {
   await cleanup();

@@ -147,31 +147,62 @@ export async function revealContact(
     }
   }
 
-  await db.transaction(async (tx) => {
-    if (existing) {
-      await tx
-        .update(contactReveals)
-        .set({ revealedAt: new Date(), chargedCredits, source })
-        .where(eq(contactReveals.id, existing.id));
-    } else {
-      await tx.insert(contactReveals).values({ userId, staffId, chargedCredits, source });
-    }
+  // Sentinel thrown inside the transaction when a concurrent reveal consumed
+  // the last of the monthly allowance between our read and this write.
+  class AllowanceExhausted extends Error {}
 
-    if (source === "subscription") {
-      await tx.update(users).set({ creditsUsedThisPeriod: sql`${users.creditsUsedThisPeriod} + 1` }).where(eq(users.id, userId));
-      await tx.insert(creditTransactions).values({ userId, amount: -1, reason: "reveal_subscription" });
-    } else if (source === "overage") {
-      await tx.update(users).set({ creditsUsedThisPeriod: sql`${users.creditsUsedThisPeriod} + 1` }).where(eq(users.id, userId));
-      await tx.insert(creditTransactions).values({ userId, amount: -1, reason: "reveal_overage" });
-    }
+  try {
+    await db.transaction(async (tx) => {
+      if (existing) {
+        await tx
+          .update(contactReveals)
+          .set({ revealedAt: new Date(), chargedCredits, source })
+          .where(eq(contactReveals.id, existing.id));
+      } else {
+        await tx.insert(contactReveals).values({ userId, staffId, chargedCredits, source });
+      }
 
-    await tx.insert(usageEvents).values({
-      eventType: "contact_reveal",
-      schoolId: staff.schoolId,
-      sessionId: sessionId || null,
-      details: { staffId, source, chargedCredits, userId },
+      if (source === "subscription") {
+        // The allowance check earlier in this function read an unlocked row, so
+        // two concurrent reveals can both see one credit remaining. Claim the
+        // credit conditionally in the same statement that checks it: if no row
+        // matches, the allowance was consumed concurrently — roll back rather
+        // than granting a free reveal past the cap.
+        const claimed = await tx
+          .update(users)
+          .set({ creditsUsedThisPeriod: sql`${users.creditsUsedThisPeriod} + 1` })
+          .where(and(
+            eq(users.id, userId),
+            sql`coalesce(${users.creditsUsedThisPeriod}, 0) < coalesce(${users.monthlyCreditsAllocation}, 0)`,
+          ))
+          .returning({ id: users.id });
+        if (claimed.length === 0) throw new AllowanceExhausted();
+        await tx.insert(creditTransactions).values({ userId, amount: -1, reason: "reveal_subscription" });
+      } else if (source === "overage") {
+        // Overage has no cap to enforce — Stripe was already metered above.
+        await tx.update(users).set({ creditsUsedThisPeriod: sql`${users.creditsUsedThisPeriod} + 1` }).where(eq(users.id, userId));
+        await tx.insert(creditTransactions).values({ userId, amount: -1, reason: "reveal_overage" });
+      }
+
+      await tx.insert(usageEvents).values({
+        eventType: "contact_reveal",
+        schoolId: staff.schoolId,
+        sessionId: sessionId || null,
+        details: { staffId, source, chargedCredits, userId },
+      });
     });
-  });
+  } catch (err) {
+    if (err instanceof AllowanceExhausted) {
+      // A retry will re-evaluate and take the overage path (or be refused).
+      return {
+        status: "error",
+        code: "out_of_quota",
+        message: "Your monthly reveal allowance was just used up. Please retry to continue via overage.",
+        upgradeRequired: false,
+      };
+    }
+    throw err;
+  }
 
   // Mirror updated user billing state into the canonical entitlements row so
   // /api/billing/account immediately reflects the new usage/credits.

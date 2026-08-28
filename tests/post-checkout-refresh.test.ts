@@ -42,7 +42,8 @@ const win = dom.window as any;
 const g = globalThis as any;
 g.window = win;
 g.document = win.document;
-g.navigator = win.navigator;
+// Node 22+ defines globalThis.navigator with only a getter; plain assignment throws.
+Object.defineProperty(g, "navigator", { value: win.navigator, configurable: true, writable: true });
 g.HTMLElement = win.HTMLElement;
 g.Node = win.Node;
 g.Element = win.Element;

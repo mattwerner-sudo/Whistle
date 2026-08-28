@@ -133,6 +133,12 @@ async function initStripe() {
     console.log('Skipping Stripe init: DATABASE_URL not set');
     return;
   }
+  // Off Replit, Stripe credentials come from the environment. Without a key,
+  // billing is simply disabled — don't attempt the legacy Replit connector.
+  if (!process.env.STRIPE_SECRET_KEY && !process.env.REPL_IDENTITY && !process.env.WEB_REPL_RENEWAL) {
+    console.log('Skipping Stripe init: STRIPE_SECRET_KEY not set (billing disabled)');
+    return;
+  }
 
   try {
     console.log('Initializing Stripe schema...');
@@ -142,7 +148,10 @@ async function initStripe() {
     const stripeSync = await getStripeSync();
 
     console.log('Setting up managed webhook...');
-    const webhookBaseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+    // APP_URL off Replit (e.g. https://gowhistle.io); REPLIT_DOMAINS is the legacy fallback.
+    const webhookBaseUrl = process.env.APP_URL && !process.env.APP_URL.includes('localhost')
+      ? process.env.APP_URL.replace(/\/$/, '')
+      : `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
     const webhookResult = await stripeSync.findOrCreateManagedWebhook(
       `${webhookBaseUrl}/api/stripe/webhook`
     );
@@ -165,6 +174,10 @@ async function initStripe() {
   try {
     await initStripe();
     initCron();
+
+    // Re-queue work stranded by the previous shutdown (in-memory queue).
+    const { recoverInterruptedJobs } = await import("./lib/job-queue");
+    recoverInterruptedJobs();
 
     const server = await registerRoutes(app);
 

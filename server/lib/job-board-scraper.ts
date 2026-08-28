@@ -7,11 +7,12 @@
  * Called by the cron job every 6 hours.
  */
 import { chromium } from "playwright";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { db } from "../db";
 import { jobPostings, signals, schoolDirectories } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { dispatchSignalAlerts } from "./alert-subscriptions";
+import { htmlToTextForAI } from "./html-to-text";
 
 let genAI: GoogleGenAI | null = null;
 function getGenAI(): GoogleGenAI | null {
@@ -32,26 +33,49 @@ async function extractJobsWithGemini(html: string, sourceBoard: string): Promise
   const ai = getGenAI();
   if (!ai) return [];
 
-  const truncated = html.substring(0, 8000);
-  const prompt = `Extract all job listings from this HTML from ${sourceBoard}.
+  // Stripped text, not raw HTML: raw pages are dominated by head/script
+  // boilerplate, so truncating raw HTML at N chars often captures no listings
+  // at all — and input tokens dominate the Gemini bill.
+  const pageText = htmlToTextForAI(html);
+  const prompt = `Extract all job listings from this page text from ${sourceBoard}.
+Links appear inline as "text (url)". Return every job listing found; an empty
+list if there are none.
 
-Return a JSON array of objects:
-[{"title":"job title","organization":"school or org name","url":"application URL if found or empty string","postedAt":"date string if available or null","department":"department name if available or null"}]
-
-Return ONLY the JSON array. No markdown. No explanation. If no jobs found, return [].
-
-HTML:
-${truncated}`;
+PAGE TEXT:
+${pageText}`;
 
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            listings: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  organization: { type: Type.STRING },
+                  url: { type: Type.STRING },
+                  postedAt: { type: Type.STRING },
+                  department: { type: Type.STRING },
+                },
+                required: ["title", "organization"],
+              },
+            },
+          },
+          required: ["listings"],
+        },
+      },
     });
-    const text = (response.text ?? "").trim().replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(text);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
+    const parsed = JSON.parse(response.text ?? "");
+    return Array.isArray(parsed?.listings) ? parsed.listings : [];
+  } catch (err) {
+    console.error(`[JobBoardScraper] Gemini extraction failed for ${sourceBoard}:`, err);
     return [];
   }
 }

@@ -7,7 +7,7 @@ import { detectTechStack } from "./tech-stack-detector";
 import { getBuyingWindowStatus, inferEmailFromPattern } from "./ai-extractor";
 import { detectTechChanges, createNewHireSignal, createDepartureSignal, createTitleChangeSignal } from "./graph-engine";
 import { db } from "../db";
-import { careerHistory, staffMembers } from "@shared/schema";
+import { careerHistory, staffMembers, extractionJobs } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { 
   isParserDisabled, 
@@ -254,6 +254,39 @@ export function queueJob(jobId: number): void {
   jobPromise.finally(() => {
     activeJobs.delete(jobId);
   });
+}
+
+/**
+ * Startup recovery: the queue (activeJobs, pLimit) lives in memory, so a crash
+ * or deploy mid-scrape leaves extraction_jobs rows stuck at "processing" and
+ * nothing ever re-queues "pending" ones. Call once on boot: interrupted jobs
+ * are reset to pending, then everything pending is re-queued.
+ */
+export async function recoverInterruptedJobs(): Promise<void> {
+  try {
+    const orphaned = await db
+      .update(extractionJobs)
+      .set({ status: "pending" })
+      .where(eq(extractionJobs.status, "processing"))
+      .returning({ id: extractionJobs.id });
+    if (orphaned.length > 0) {
+      console.log(`[JobQueue] Reset ${orphaned.length} job(s) interrupted by the last shutdown`);
+    }
+
+    const pending = await db
+      .select({ id: extractionJobs.id })
+      .from(extractionJobs)
+      .where(eq(extractionJobs.status, "pending"))
+      .orderBy(extractionJobs.id)
+      .limit(100);
+    for (const row of pending) queueJob(row.id);
+    if (pending.length > 0) {
+      console.log(`[JobQueue] Re-queued ${pending.length} pending job(s) on startup`);
+    }
+  } catch (err) {
+    // Recovery must never prevent the server from starting.
+    console.error("[JobQueue] Startup recovery failed:", err);
+  }
 }
 
 async function processExtractionJob(jobId: number): Promise<void> {
