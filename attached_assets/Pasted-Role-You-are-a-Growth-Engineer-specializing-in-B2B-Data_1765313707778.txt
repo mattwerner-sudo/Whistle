@@ -1,0 +1,195 @@
+Role: You are a Growth Engineer specializing in B2B Data Tools. We are adding an Account-Based Marketing (ABM) module to the app.
+
+Goal: Allow users to upload a list of target accounts (Schools) and instantly match them against our database to find coverage gaps.
+
+Shutterstock
+
+Please execute the following 4 steps to build the List Matching Engine:
+
+Step 1: Install Dependencies
+We need a fuzzy matching library to handle messy school names. npm install fuzzysort papaparse
+
+Step 2: Update Schema for Target Lists
+Update shared/schema.ts. We need a way to save these matched lists.
+
+TypeScript
+
+// Add to shared/schema.ts
+
+export const targetLists = pgTable("target_lists", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"), // If you have auth, otherwise nullable for now
+  name: text("name").notNull(), // e.g. "Q3 Sales Targets"
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const targetListItems = pgTable("target_list_items", {
+  id: serial("id").primaryKey(),
+  listId: integer("list_id").notNull(),
+  schoolId: text("school_id"), // Null if no match found yet
+  rawName: text("raw_name").notNull(), // The name they uploaded (e.g. "Ohio St")
+  status: text("status").default("pending"), // 'matched', 'unmatched', 'scraping'
+});
+
+export const insertTargetListSchema = createInsertSchema(targetLists);
+Step 3: Create the "Fuzzy Matcher" API
+Create server/lib/school-matcher.ts and the route. This logic takes a raw name and finds the closest valid School ID.
+
+TypeScript
+
+// server/lib/school-matcher.ts
+import fuzzysort from 'fuzzysort';
+import { seedSchools } from "../../shared/ncaa-seed-data"; 
+
+// Create a search index for speed
+const searchIndex = seedSchools.map(s => ({
+  id: s.schoolId,
+  name: s.schoolName,
+  full: s.schoolFullName,
+  // Create a combined search string
+  searchStr: `${s.schoolName} ${s.schoolFullName} ${s.schoolId}`
+}));
+
+export function matchSchool(rawName: string) {
+  const results = fuzzysort.go(rawName, searchIndex, {
+    key: 'searchStr',
+    limit: 1,
+    threshold: -10000 // Tune this for strictness
+  });
+
+  if (results.length > 0) {
+    return results[0].obj;
+  }
+  return null;
+}
+Now add the Route in server/routes.ts:
+
+TypeScript
+
+// server/routes.ts
+import { matchSchool } from "./lib/school-matcher";
+
+  // POST /api/accounts/match-bulk
+  app.post("/api/accounts/match-bulk", async (req, res) => {
+    const { schoolNames } = req.body; // Array of strings
+    const results = [];
+
+    for (const name of schoolNames) {
+      const match = matchSchool(name);
+      results.push({
+        rawName: name,
+        matched: !!match,
+        schoolId: match?.id || null,
+        schoolName: match?.name || null
+      });
+    }
+    
+    res.json({ results });
+  });
+Step 4: Build the "List Matcher" UI
+Create a new page client/src/pages/list-matcher.tsx.
+
+Feature: A text area to paste school names (one per line).
+
+Feature: A "Match" button that hits the API.
+
+Feature: A Results Table showing "✅ Matched" or "❌ Missing".
+
+Feature: A "Scrape Missing" button that sends the unmatched names to the Discovery Crawler we built earlier.
+
+TypeScript
+
+// client/src/pages/list-matcher.tsx
+import { useState } from 'react';
+import { apiRequest } from '@/lib/queryClient';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { CheckCircle, XCircle, Search } from 'lucide-react';
+
+export default function ListMatcher() {
+  const [input, setInput] = useState('');
+  const [results, setResults] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleMatch = async () => {
+    setIsLoading(true);
+    const lines = input.split('\n').filter(line => line.trim() !== '');
+    
+    try {
+      const res = await apiRequest('POST', '/api/accounts/match-bulk', { schoolNames: lines });
+      setResults(res.results);
+    } catch(e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="p-6 max-w-4xl mx-auto space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Account List Matcher</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">Paste your target accounts (one per line) to check coverage.</p>
+          <Textarea 
+            placeholder="e.g.&#10;Alabama&#10;Ohio State&#10;Some Small College"
+            rows={6}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+          />
+          <Button onClick={handleMatch} disabled={isLoading || !input}>
+            {isLoading ? 'Matching...' : 'Match Accounts'}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {results.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>Results</CardTitle></CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Input Name</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Matched School</TableHead>
+                  <TableHead>Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {results.map((r, i) => (
+                  <TableRow key={i}>
+                    <TableCell>{r.rawName}</TableCell>
+                    <TableCell>
+                      {r.matched ? (
+                        <div className="flex items-center text-green-600 gap-2"><CheckCircle className="h-4 w-4" /> Found</div>
+                      ) : (
+                        <div className="flex items-center text-red-500 gap-2"><XCircle className="h-4 w-4" /> Missing</div>
+                      )}
+                    </TableCell>
+                    <TableCell>{r.schoolName || '-'}</TableCell>
+                    <TableCell>
+                      {r.matched ? (
+                        <Button variant="link" size="sm" onClick={() => window.open(`/directory?school=${r.schoolId}`)}>
+                          View Staff
+                        </Button>
+                      ) : (
+                        <Button variant="outline" size="sm">
+                          Queue Scrape
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}

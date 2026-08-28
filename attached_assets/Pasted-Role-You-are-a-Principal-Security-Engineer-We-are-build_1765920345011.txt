@@ -1,0 +1,117 @@
+Role: You are a Principal Security Engineer. We are building the Authentication & User System for an Enterprise B2B application.
+
+Core Requirements:
+
+Security: Use Argon2id (not bcrypt) for password hashing.
+
+State: Use Database-Backed Sessions (not JWTs) for instant revocation capability.
+
+Validation: Use Zod to strictly validate all incoming auth data.
+
+Architecture: The system must handle thousands of users via Connection Pooling.
+
+Please execute the following 5 steps to implement the system:
+
+Step 1: Install Security Dependencies
+npm install argon2 nanoid zodb express-session connect-pg-simple
+
+Step 2: Update Schema for Auth
+Update shared/schema.ts to include robust User and Session tables.
+
+TypeScript
+
+// shared/schema.ts
+import { pgTable, text, serial, timestamp, boolean } from "drizzle-orm/pg-core";
+
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(), // Argon2id hash
+  fullName: text("full_name").notNull(),
+  role: text("role").default("user"), // 'admin', 'user'
+  isVerified: boolean("is_verified").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  lastLoginAt: timestamp("last_login_at"),
+});
+
+// We store sessions in DB to allow admins to "Revoke All Sessions" for a user
+export const sessions = pgTable("sessions", {
+  sid: text("sid").primaryKey(), // Session ID
+  sess: text("sess").notNull(), // JSON payload
+  expire: timestamp("expire").notNull(),
+});
+
+export type User = typeof users.$inferSelect;
+Step 3: Create the Hashing Service
+Create server/lib/auth-utils.ts. This abstracts the Argon2 security logic.
+
+TypeScript
+
+// server/lib/auth-utils.ts
+import argon2 from "argon2";
+
+export async function hashPassword(password: string): Promise<string> {
+  return await argon2.hash(password, {
+    type: argon2.argon2id,
+    memoryCost: 2 ** 16, // 64 MB (Harder for GPUs)
+    timeCost: 3,         // 3 Iterations
+    parallelism: 1,
+  });
+}
+
+export async function verifyPassword(hash: string, plain: string): Promise<boolean> {
+  try {
+    return await argon2.verify(hash, plain);
+  } catch (err) {
+    return false;
+  }
+}
+Step 4: Configure Session Middleware with Pooling
+Update server/index.ts (or app entry point) to use the database for session storage.
+
+TypeScript
+
+// Add to server/index.ts
+import session from "express-session";
+import pgSession from "connect-pg-simple";
+import { pool } from "./db"; // Ensure this exports your PgPool
+
+const PgStore = pgSession(session);
+
+app.use(session({
+  store: new PgStore({ 
+    pool: pool, // Use the existing connection pool
+    tableName: 'sessions' 
+  }),
+  secret: process.env.SESSION_SECRET || "super-secret-dev-key",
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    secure: process.env.NODE_ENV === "production", // True in prod (HTTPS)
+    httpOnly: true, // Prevents XSS attacks stealing cookies
+    sameSite: "lax"
+  }
+}));
+Step 5: Implement Auth Routes
+Create server/routes/auth.ts. Implement /register, /login, /logout, and /me.
+
+Login Logic:
+
+Find user by email.
+
+verifyPassword(user.passwordHash, input.password).
+
+If valid, set req.session.userId = user.id.
+
+Update lastLoginAt timestamp.
+
+Register Logic:
+
+Check if email exists.
+
+hashPassword(input.password).
+
+Insert into DB.
+
+Action: Please provide the full code for server/routes/auth.ts ensuring all inputs are validated with Zod.

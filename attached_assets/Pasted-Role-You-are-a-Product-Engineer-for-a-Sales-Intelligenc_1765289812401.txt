@@ -1,0 +1,152 @@
+Role: You are a Product Engineer for a Sales Intelligence Platform. We are upgrading the app to support the "Sales Rep" workflow.
+
+Goal: Transform the directory into a prospecting tool. Users need to organize contacts into Lists, see Social Links, and quickly Copy Data for outreach.
+
+Shutterstock
+
+Please execute these 4 steps to upgrade the application:
+
+Step 1: Upgrade Schema for Sales Data
+Update shared/schema.ts. We need to store Lists (for organizing prospects) and Social fields.
+
+TypeScript
+
+// Add to shared/schema.ts
+
+// 1. Update StaffMembers table
+export const staffMembers = pgTable("staff_members", {
+  // ... existing fields ...
+  linkedinUrl: text("linkedin_url"),
+  twitterHandle: text("twitter_handle"),
+  hiredYear: integer("hired_year"), // For tenure calculation
+  // ... existing fields ...
+}, (table) => ({
+  // ... existing indexes ...
+}));
+
+// 2. Create Saved Lists tables
+export const savedLists = pgTable("saved_lists", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"), // Link to your User Auth table
+  name: text("name").notNull(), // e.g., "SEC Football Leads"
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const savedListItems = pgTable("saved_list_items", {
+  id: serial("id").primaryKey(),
+  listId: integer("list_id").notNull(),
+  staffId: integer("staff_id").notNull(),
+  notes: text("notes"), // "Met at convention", etc.
+  addedAt: timestamp("added_at").defaultNow(),
+});
+
+export const insertSavedListSchema = createInsertSchema(savedLists);
+export type SavedList = typeof savedLists.$inferSelect;
+Step 2: Create List Management API
+Update server/routes.ts to handle creating lists and adding contacts to them.
+
+TypeScript
+
+// server/routes.ts
+
+  // GET Lists
+  app.get("/api/lists", async (req, res) => {
+    // In real app, filter by req.user.id
+    const result = await db.select().from(savedLists); 
+    res.json(result);
+  });
+
+  // POST Create List
+  app.post("/api/lists", async (req, res) => {
+    const { name } = req.body;
+    const [list] = await db.insert(savedLists).values({ name, userId: 1 }).returning();
+    res.json(list);
+  });
+
+  // POST Add to List
+  app.post("/api/lists/:id/add", async (req, res) => {
+    const { staffId } = req.body;
+    await db.insert(savedListItems).values({ 
+      listId: parseInt(req.params.id), 
+      staffId 
+    });
+    res.json({ success: true });
+  });
+Step 3: Implement "Sales Action" UI
+Update client/src/pages/staff-directory.tsx. We will add a "Quick Actions" column to the staff table.
+
+Update the Table Row to include this Action Bar:
+
+TypeScript
+
+// Inside the Table Mapping in staff-directory.tsx
+
+<TableCell className="text-right">
+  <div className="flex justify-end gap-2">
+    
+    {/* 1. LinkedIn Button (if available) */}
+    {member.linkedinUrl && (
+      <a href={member.linkedinUrl} target="_blank" className="text-blue-600 hover:text-blue-800">
+        <Linkedin className="h-4 w-4" />
+      </a>
+    )}
+
+    {/* 2. Quick Copy Button */}
+    <Button 
+      variant="ghost" 
+      size="icon" 
+      className="h-8 w-8"
+      onClick={() => {
+        navigator.clipboard.writeText(`${member.name} <${member.email}>`);
+        toast({ title: "Copied!", description: "Ready to paste into Gmail." });
+      }}
+      title="Copy for Email"
+    >
+      <Copy className="h-4 w-4" />
+    </Button>
+
+    {/* 3. Add to List Button */}
+    <Button 
+      variant="ghost" 
+      size="icon"
+      className="h-8 w-8 text-muted-foreground hover:text-primary"
+      onClick={() => handleAddToList(member.id)} // You will need to create this handler
+    >
+      <PlusSquare className="h-4 w-4" />
+    </Button>
+
+  </div>
+</TableCell>
+Step 4: Add "Bulk CRM Export"
+Update the existing Export function in client/src/pages/staff-directory.tsx to match a standard CRM import format (First Name, Last Name split).
+
+TypeScript
+
+const handleCRMExport = () => {
+  if (!data?.members) return;
+  
+  // Split Name logic
+  const rows = data.members.map((m: any) => {
+    const nameParts = m.name.split(" ");
+    const lastName = nameParts.pop();
+    const firstName = nameParts.join(" ");
+    
+    return [
+      firstName,
+      lastName,
+      m.email,
+      m.title,
+      m.phone || "",
+      m.schoolName,
+      m.linkedinUrl || "",
+      "NCSA Directory" // Lead Source
+    ].map(f => `"${f}"`).join(",");
+  });
+
+  const csv = [
+    "First Name,Last Name,Email,Job Title,Mobile Phone,Company,LinkedIn URL,Lead Source",
+    ...rows
+  ].join("\n");
+
+  // ... existing download blob logic ...
+};

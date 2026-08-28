@@ -1,0 +1,57 @@
+The Atomic Model of the App:
+
+Identity Atom (Auth): Security, Sessions, hashing (Argon2id), Role-Based Access.
+
+Data Atom (State): PostgreSQL integrity, ACID compliance, schema validation, search indexing.
+
+Compute Atom (Logic): Scraper concurrency, AI extraction latency, job queue throughput.
+
+Interface Atom (UX): Client-side state, responsiveness, optimistic UI, error boundary handling.
+
+Please execute the following 4-Layer Atomic Audit:
+
+Layer 1: The Identity Atom (Security First)
+Test 1.1 (Entropy Check): Register a new user with the password "password123". Check the database directly.
+
+Pass Criteria: The password_hash column must actually contain a long Argon2 string, NOT plain text or a simple MD5.
+
+Test 1.2 (Session Revocation): Log in as User A in two different browsers (Chrome & Firefox). In the database, delete the row in the sessions table corresponding to Chrome.
+
+Pass Criteria: Refresh the Chrome tab. The user must be logged out immediately. Firefox should stay logged in. (Proves server-side session control).
+
+Test 1.3 (Privilege Escalation): As a standard "Customer" user, attempt to POST to /api/admin/seed-db.
+
+Pass Criteria: Response must be 403 Forbidden, not 200 OK or 500 Error.
+
+Layer 2: The Data Atom (Integrity & Scale)
+Test 2.1 (Input Sanitization): In the "School Name" field of a new record, input: University of <script>alert('XSS')</script>.
+
+Pass Criteria: The database should save the string literally, but when rendered on the frontend, the script must NOT execute.
+
+Test 2.2 (Relation Integrity): Create a "Saved List". Add 5 staff members to it. Now, delete one of those staff members from the staff_members table.
+
+Pass Criteria: The database should either block the deletion (Foreign Key Constraint) or cascade the delete cleanly. It must NOT leave a "Ghost Record" in the list that crashes the UI when loaded.
+
+Test 2.3 (Search Atom): Search for "Coach". Then search for "COACH". Then "coach ".
+
+Pass Criteria: All three must return the exact same result set (Case-insensitive, Trimmed, Normalized).
+
+Layer 3: The Compute Atom (Resilience)
+Test 3.1 (The "Thundering Herd"): We use p-limit for scraping. Modify the limit to 1 temporarily. Queue 10 school extractions.
+
+Pass Criteria: Watch the logs. Do they execute strictly one by one? If they run in parallel, the concurrency atom is broken, risking an IP ban.
+
+Test 3.2 (AI Degradation): Disconnect the Internet (or set an invalid API Key). Trigger an AI extraction.
+
+Pass Criteria: The system should fallback to "Regex Extraction" or return a specific error code. It must NOT crash the entire Node process with an UnhandledPromiseRejection.
+
+Layer 4: The Interface Atom (User Trust)
+Test 4.1 (Optimistic UI): On the "List Matcher", click "Match Accounts". Immediately disconnect the network (Offline Mode) via DevTools.
+
+Pass Criteria: The UI should show a "Network Error" toast or "Retrying..." badge. It should NOT hang indefinitely on a spinning loader.
+
+Test 4.2 (Visual Regression): Open the "School Detail Modal". Resize the browser window rapidly from Desktop to Mobile width.
+
+Pass Criteria: The modal content must remain scrollable and the "Close" button must remain visible/clickable at all times.
+
+Execution Strategy: Start with Layer 1 (Identity). Security flaws here render the rest of the app moot. Report findings immediately.

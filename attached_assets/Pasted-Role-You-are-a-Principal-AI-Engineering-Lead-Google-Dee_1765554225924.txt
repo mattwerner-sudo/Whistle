@@ -1,0 +1,155 @@
+Role: You are a Principal AI Engineering Lead (Google/DeepMind level). You are responsible for the Reliability, Accuracy, and Scale of the "Athletics Directory" platform.
+
+Objective: We are moving from "Prototype" to "Production." I need you to implement a Holistic QA Suite that pressure-tests the entire stack:
+
+AI Accuracy (Evals): Does Gemini actually extract titles correctly, or is it hallucinating?
+
+System Resilience: What happens when 50 jobs fire at once? (Concurrency limits).
+
+Data Integrity: Are we saving duplicates? Are emails valid?
+
+Module Loading: Do our "Lazy Loaded" scrapers actually initialize correctly under load?
+
+Please execute the following 3 steps to build the "QA Harness":
+
+Step 1: Install Testing Frameworks
+We need a runner (jest or tsx for scripts) and benchmarking tools. npm install -D jest ts-jest @types/jest artillery
+
+Step 2: Create the "Golden Set" Evaluation Data
+Create tests/golden-data.ts. This contains "Ground Truth" data—verified HTML snippets and the exact JSON we expect the AI/Scraper to extract. We will measure our accuracy against this.
+
+TypeScript
+
+// tests/golden-data.ts
+
+export const GOLDEN_SET = [
+  {
+    name: "Standard Sidearm Site (Alabama)",
+    html: `<div class="sidearm-staff-member">
+             <div class="name">Nick Saban</div>
+             <div class="title">Head Football Coach</div>
+             <a href="mailto:nsaban@ua.edu">Email</a>
+           </div>`,
+    expected: { name: "Nick Saban", title: "Head Football Coach", email: "nsaban@ua.edu" }
+  },
+  {
+    name: "Tricky/Broken HTML (Oregon State Edge Case)",
+    html: `<div>
+             <h3>Jonathan Smith</h3>
+             Head Coach - Football
+             <br>
+             jsmith@oregonstate.edu
+           </div>`,
+    expected: { name: "Jonathan Smith", title: "Head Coach - Football", email: "jsmith@oregonstate.edu" }
+  },
+  {
+    name: "Cloudflare Encrypted Email",
+    html: `<div class="staff">
+             <h4>Mike White</h4>
+             <a href="/cdn-cgi/l/email-protection" data-cfemail="123f567b...">[email protected]</a>
+           </div>`,
+    expected: { name: "Mike White", email: null } // We expect null, not garbage
+  }
+];
+Step 3: Build the "Master QA Runner"
+Create tests/system-audit.ts. This is a standalone script that runs a battery of tests against your running server and codebase.
+
+TypeScript
+
+// tests/system-audit.ts
+import { db } from "../server/db";
+import { aiExtractFallback } from "../server/lib/ai-extractor";
+import { GOLDEN_SET } from "./golden-data";
+import { storage } from "../server/storage";
+
+async function runAudit() {
+  console.log("🚀 STARTING DEEP SYSTEM AUDIT...");
+  const results = { passed: 0, failed: 0 };
+
+  // --- TEST 1: AI & PARSER ACCURACY (Evals) ---
+  console.log("\n🧪 1. Running AI/Parser Evals...");
+  for (const case of GOLDEN_SET) {
+    const start = Date.now();
+    // Simulate the extraction logic here
+    const result = await aiExtractFallback(case.html, "test-url"); 
+    const duration = Date.now() - start;
+    
+    // Simple equality check (In prod, use fuzzy matching)
+    const nameMatch = result?.name === case.expected.name;
+    const emailMatch = result?.email === case.expected.email;
+    
+    if (nameMatch && emailMatch) {
+      console.log(`✅ [PASS] ${case.name} (${duration}ms)`);
+      results.passed++;
+    } else {
+      console.error(`❌ [FAIL] ${case.name}`);
+      console.error(`   Expected:`, case.expected);
+      console.error(`   Got:`, result);
+      results.failed++;
+    }
+  }
+
+  // --- TEST 2: DATABASE INTEGRITY ---
+  console.log("\n🗄️ 2. Checking Database Health...");
+  // Check for duplicate emails in staff_members (Critical Data Quality issue)
+  const duplicates = await db.execute(sql`
+    SELECT email, COUNT(*) 
+    FROM staff_members 
+    WHERE email IS NOT NULL 
+    GROUP BY email 
+    HAVING COUNT(*) > 1
+  `);
+  
+  if (duplicates.rowCount === 0) {
+    console.log("✅ [PASS] No Duplicate Emails found.");
+    results.passed++;
+  } else {
+    console.error(`❌ [FAIL] Found ${duplicates.rowCount} duplicate emails.`);
+    results.failed++;
+  }
+
+  // --- TEST 3: MODULE LOADING & DEPENDENCY CHECK ---
+  console.log("\n📦 3. Verifying Critical Modules...");
+  try {
+    const playwright = await import("playwright");
+    const cheerio = await import("cheerio");
+    if (playwright && cheerio) {
+      console.log("✅ [PASS] Scraper Modules loaded successfully.");
+      results.passed++;
+    }
+  } catch (e) {
+    console.error("❌ [FAIL] Module Load Error:", e);
+    results.failed++;
+  }
+
+  // --- TEST 4: JOB QUEUE CONCURRENCY SIMULATION ---
+  console.log("\n⚡ 4. Stress Testing Job Queue...");
+  // Simulate 100 rapid requests to the queue
+  const startLoad = Date.now();
+  const promises = [];
+  for(let i=0; i<50; i++) {
+    // We mock the queue push function to measure pure overhead
+    promises.push(storage.createExtractionJob({ type: 'test', status: 'pending' }));
+  }
+  await Promise.all(promises);
+  const loadTime = Date.now() - startLoad;
+  
+  if (loadTime < 2000) {
+    console.log(`✅ [PASS] Enqueued 50 jobs in ${loadTime}ms (High Throughput).`);
+    results.passed++;
+  } else {
+    console.warn(`⚠️ [WARN] Job Queue Slow: ${loadTime}ms`);
+  }
+
+  // --- FINAL REPORT ---
+  console.log("\n==================================");
+  console.log(`AUDIT COMPLETE: ${results.passed} Passed, ${results.failed} Failed`);
+  if (results.failed > 0) process.exit(1);
+  process.exit(0);
+}
+
+runAudit();
+Step 4: Add the QA Command
+Update package.json to include a script: "test:audit": "tsx tests/system-audit.ts"
+
+Instruction: Run npm run test:audit immediately to baseline the current system health.
