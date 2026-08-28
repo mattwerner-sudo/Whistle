@@ -1,0 +1,121 @@
+name: Email Coverage Baseline Refresh
+
+# Produces the canonical "bio enrichment disabled" baseline that the
+# regression check (.github/workflows/email-coverage-audit.yml) diffs
+# against. The baseline rarely changes in interesting ways -- it's just
+# the raw scrape of every directory in shared/ncaa-conferences.ts -- so
+# we refresh it on a schedule (and on demand) instead of regenerating it
+# on every PR.
+#
+# The latest run uploads `audit-baseline.json` as a long-retention
+# artifact named `audit-baseline-canonical-latest`. The regression check
+# workflow downloads that artifact by default (see
+# .github/workflows/email-coverage-audit.yml).
+
+on:
+  schedule:
+    # Weekly, Sunday 06:00 UTC. Bumping cadence is cheap; just edit the cron.
+    - cron: '0 6 * * 0'
+  workflow_dispatch:
+    inputs:
+      per_conf:
+        description: 'Schools sampled per conference (multi-conf-audit --per-conf). Use "all" for every school.'
+        required: false
+        default: 'all'
+      conferences:
+        description: 'Comma-separated conference shortNames to audit (blank = all)'
+        required: false
+        default: ''
+
+concurrency:
+  group: email-coverage-baseline
+  cancel-in-progress: false
+
+jobs:
+  baseline:
+    name: Refresh canonical baseline (bio enrichment disabled)
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      AUDIT_PER_CONF: ${{ github.event.inputs.per_conf || 'all' }}
+      AUDIT_CONFERENCES: ${{ github.event.inputs.conferences || '' }}
+      AUDIT_CONCURRENCY: '4'
+      AUDIT_SITE_TIMEOUT_MS: '120000'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Build audit CLI args
+        id: args
+        run: |
+          if [ "${AUDIT_PER_CONF}" = "all" ]; then
+            SAMPLE_FLAG="--all"
+          else
+            SAMPLE_FLAG="--per-conf=${AUDIT_PER_CONF}"
+          fi
+          ARGS="${SAMPLE_FLAG} --concurrency=${AUDIT_CONCURRENCY} --site-timeout=${AUDIT_SITE_TIMEOUT_MS}"
+          if [ -n "${AUDIT_CONFERENCES}" ]; then
+            ARGS="${ARGS} --conferences=${AUDIT_CONFERENCES}"
+          fi
+          echo "audit_args=${ARGS}" >> "$GITHUB_OUTPUT"
+          echo "Audit args: ${ARGS}"
+
+      - name: Run baseline audit (bio enrichment disabled)
+        env:
+          SCRAPER_BIO_ENRICH_MAX_PAGES: '0'
+        run: |
+          npx tsx tests/multi-conf-audit.ts \
+            ${{ steps.args.outputs.audit_args }} \
+            --out=audit-baseline.json
+
+      - name: Stamp provenance
+        run: |
+          node -e "
+            const fs = require('fs');
+            const data = JSON.parse(fs.readFileSync('audit-baseline.json', 'utf8'));
+            data.provenance = {
+              workflow: 'email-coverage-baseline.yml',
+              runId: '${{ github.run_id }}',
+              runUrl: '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}',
+              commit: '${{ github.sha }}',
+              ref: '${{ github.ref }}',
+              perConf: process.env.AUDIT_PER_CONF,
+              conferences: process.env.AUDIT_CONFERENCES,
+              capturedAt: new Date().toISOString(),
+              bioEnrichmentDisabled: true,
+            };
+            fs.writeFileSync('audit-baseline.json', JSON.stringify(data, null, 2));
+            console.log('Stamped provenance:', JSON.stringify(data.provenance, null, 2));
+          "
+
+      - name: Upload canonical baseline artifact
+        uses: actions/upload-artifact@v4
+        with:
+          # Stable name so the regression-check workflow can find the
+          # latest copy with dawidd6/action-download-artifact.
+          name: audit-baseline-canonical-latest
+          path: audit-baseline.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload run-stamped copy
+        uses: actions/upload-artifact@v4
+        with:
+          # Also keep a per-run copy for historical comparison.
+          name: audit-baseline-canonical-${{ github.run_id }}
+          path: audit-baseline.json
+          if-no-files-found: error
+          retention-days: 90

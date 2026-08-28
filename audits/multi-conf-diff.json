@@ -1,0 +1,1651 @@
+{
+  "baseline": {
+    "path": "audits/multi-conf-baseline.json",
+    "startedAt": "2026-04-22T16:35:57.717Z",
+    "total": {
+      "sites": 242,
+      "contacts": 41364,
+      "emails": 32808,
+      "bioRecovered": 0,
+      "bioFetched": 0,
+      "bioCacheHits": 0
+    }
+  },
+  "after": {
+    "path": "audits/multi-conf-after.json",
+    "startedAt": "2026-04-22T16:55:33.847Z",
+    "total": {
+      "sites": 242,
+      "contacts": 41163,
+      "emails": 33750,
+      "bioRecovered": 986,
+      "bioFetched": 5286,
+      "bioCacheHits": 40
+    }
+  },
+  "totalDelta": {
+    "sites": 0,
+    "contacts": -201,
+    "emails": 942,
+    "bioRecovered": 986,
+    "bioFetched": 5286,
+    "bioCacheHits": 40
+  },
+  "perConference": [
+    {
+      "conference": "A-10",
+      "baseline": {
+        "sites": 15,
+        "contacts": 1883,
+        "emails": 1607,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 15,
+        "contacts": 1883,
+        "emails": 1647,
+        "bioRecovered": 40,
+        "bioFetched": 276,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": 0,
+        "emails": 40,
+        "bioRecovered": 40,
+        "bioFetched": 276,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "conference": "AAC",
+      "baseline": {
+        "sites": 14,
+        "contacts": 2448,
+        "emails": 1919,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 14,
+        "contacts": 2623,
+        "emails": 2075,
+        "bioRecovered": 46,
+        "bioFetched": 413,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": 175,
+        "emails": 156,
+        "bioRecovered": 46,
+        "bioFetched": 413,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "conference": "ACC",
+      "baseline": {
+        "sites": 15,
+        "contacts": 3576,
+        "emails": 3114,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 15,
+        "contacts": 3576,
+        "emails": 3229,
+        "bioRecovered": 116,
+        "bioFetched": 297,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": 0,
+        "emails": 115,
+        "bioRecovered": 116,
+        "bioFetched": 297,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "conference": "Big 12",
+      "baseline": {
+        "sites": 12,
+        "contacts": 3172,
+        "emails": 2174,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 12,
+        "contacts": 2851,
+        "emails": 2247,
+        "bioRecovered": 74,
+        "bioFetched": 282,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": -321,
+        "emails": 73,
+        "bioRecovered": 74,
+        "bioFetched": 282,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "conference": "Big Sky",
+      "baseline": {
+        "sites": 13,
+        "contacts": 1524,
+        "emails": 1161,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 13,
+        "contacts": 1524,
+        "emails": 1205,
+        "bioRecovered": 44,
+        "bioFetched": 355,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": 0,
+        "emails": 44,
+        "bioRecovered": 44,
+        "bioFetched": 355,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "conference": "Big Ten",
+      "baseline": {
+        "sites": 14,
+        "contacts": 4658,
+        "emails": 3372,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 14,
+        "contacts": 4898,
+        "emails": 3671,
+        "bioRecovered": 177,
+        "bioFetched": 357,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": 240,
+        "emails": 299,
+        "bioRecovered": 177,
+        "bioFetched": 357,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "conference": "CAA",
+      "baseline": {
+        "sites": 14,
+        "contacts": 1872,
+        "emails": 1600,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 14,
+        "contacts": 1872,
+        "emails": 1619,
+        "bioRecovered": 19,
+        "bioFetched": 272,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": 0,
+        "emails": 19,
+        "bioRecovered": 19,
+        "bioFetched": 272,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "conference": "CUSA",
+      "baseline": {
+        "sites": 10,
+        "contacts": 1458,
+        "emails": 1083,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 10,
+        "contacts": 1423,
+        "emails": 1130,
+        "bioRecovered": 80,
+        "bioFetched": 245,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": -35,
+        "emails": 47,
+        "bioRecovered": 80,
+        "bioFetched": 245,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "conference": "Horizon",
+      "baseline": {
+        "sites": 11,
+        "contacts": 952,
+        "emails": 772,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 11,
+        "contacts": 952,
+        "emails": 801,
+        "bioRecovered": 29,
+        "bioFetched": 180,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": 0,
+        "emails": 29,
+        "bioRecovered": 29,
+        "bioFetched": 180,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "conference": "Ivy",
+      "baseline": {
+        "sites": 8,
+        "contacts": 1817,
+        "emails": 1646,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 8,
+        "contacts": 1872,
+        "emails": 1754,
+        "bioRecovered": 59,
+        "bioFetched": 177,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": 55,
+        "emails": 108,
+        "bioRecovered": 59,
+        "bioFetched": 177,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "conference": "MAC",
+      "baseline": {
+        "sites": 12,
+        "contacts": 1784,
+        "emails": 1502,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 12,
+        "contacts": 1784,
+        "emails": 1553,
+        "bioRecovered": 51,
+        "bioFetched": 271,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": 0,
+        "emails": 51,
+        "bioRecovered": 51,
+        "bioFetched": 271,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "conference": "MEAC",
+      "baseline": {
+        "sites": 8,
+        "contacts": 413,
+        "emails": 301,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 8,
+        "contacts": 413,
+        "emails": 305,
+        "bioRecovered": 4,
+        "bioFetched": 112,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": 0,
+        "emails": 4,
+        "bioRecovered": 4,
+        "bioFetched": 112,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "conference": "MVC",
+      "baseline": {
+        "sites": 12,
+        "contacts": 1330,
+        "emails": 1117,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 12,
+        "contacts": 1330,
+        "emails": 1141,
+        "bioRecovered": 24,
+        "bioFetched": 213,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": 0,
+        "emails": 24,
+        "bioRecovered": 24,
+        "bioFetched": 213,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "conference": "MWC",
+      "baseline": {
+        "sites": 12,
+        "contacts": 2203,
+        "emails": 1733,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 12,
+        "contacts": 2203,
+        "emails": 1807,
+        "bioRecovered": 74,
+        "bioFetched": 289,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": 0,
+        "emails": 74,
+        "bioRecovered": 74,
+        "bioFetched": 289,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "conference": "Pac-12",
+      "baseline": {
+        "sites": 12,
+        "contacts": 3402,
+        "emails": 2917,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 12,
+        "contacts": 3402,
+        "emails": 2917,
+        "bioRecovered": 0,
+        "bioFetched": 334,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": 0,
+        "emails": 0,
+        "bioRecovered": 0,
+        "bioFetched": 334,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "conference": "SEC",
+      "baseline": {
+        "sites": 14,
+        "contacts": 3675,
+        "emails": 2650,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 14,
+        "contacts": 3360,
+        "emails": 2400,
+        "bioRecovered": 40,
+        "bioFetched": 281,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": -315,
+        "emails": -250,
+        "bioRecovered": 40,
+        "bioFetched": 281,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "conference": "SWAC",
+      "baseline": {
+        "sites": 12,
+        "contacts": 880,
+        "emails": 593,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 12,
+        "contacts": 880,
+        "emails": 616,
+        "bioRecovered": 23,
+        "bioFetched": 256,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": 0,
+        "emails": 23,
+        "bioRecovered": 23,
+        "bioFetched": 256,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "conference": "Summit",
+      "baseline": {
+        "sites": 10,
+        "contacts": 1034,
+        "emails": 910,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 10,
+        "contacts": 1034,
+        "emails": 916,
+        "bioRecovered": 6,
+        "bioFetched": 124,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": 0,
+        "emails": 6,
+        "bioRecovered": 6,
+        "bioFetched": 124,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "conference": "Sun Belt",
+      "baseline": {
+        "sites": 14,
+        "contacts": 2105,
+        "emails": 1656,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 14,
+        "contacts": 2105,
+        "emails": 1721,
+        "bioRecovered": 68,
+        "bioFetched": 398,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": 0,
+        "emails": 65,
+        "bioRecovered": 68,
+        "bioFetched": 398,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "conference": "WCC",
+      "baseline": {
+        "sites": 10,
+        "contacts": 1178,
+        "emails": 981,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 10,
+        "contacts": 1178,
+        "emails": 996,
+        "bioRecovered": 12,
+        "bioFetched": 154,
+        "bioCacheHits": 40
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": 0,
+        "emails": 15,
+        "bioRecovered": 12,
+        "bioFetched": 154,
+        "bioCacheHits": 40
+      }
+    }
+  ],
+  "perParser": [
+    {
+      "parser": "generic",
+      "baseline": {
+        "sites": 17,
+        "contacts": 4248,
+        "emails": 4242,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 17,
+        "contacts": 4248,
+        "emails": 4245,
+        "bioRecovered": 3,
+        "bioFetched": 6,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": 0,
+        "emails": 3,
+        "bioRecovered": 3,
+        "bioFetched": 6,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "parser": "none",
+      "baseline": {
+        "sites": 8,
+        "contacts": 0,
+        "emails": 0,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 9,
+        "contacts": 0,
+        "emails": 0,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 1,
+        "contacts": 0,
+        "emails": 0,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "parser": "presto",
+      "baseline": {
+        "sites": 1,
+        "contacts": 297,
+        "emails": 297,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 1,
+        "contacts": 297,
+        "emails": 297,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 0,
+        "contacts": 0,
+        "emails": 0,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      }
+    },
+    {
+      "parser": "sidearm",
+      "baseline": {
+        "sites": 208,
+        "contacts": 36479,
+        "emails": 27931,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 206,
+        "contacts": 36278,
+        "emails": 28870,
+        "bioRecovered": 983,
+        "bioFetched": 5280,
+        "bioCacheHits": 40
+      },
+      "delta": {
+        "sites": -2,
+        "contacts": -201,
+        "emails": 939,
+        "bioRecovered": 983,
+        "bioFetched": 5280,
+        "bioCacheHits": 40
+      }
+    },
+    {
+      "parser": "wordpress",
+      "baseline": {
+        "sites": 8,
+        "contacts": 340,
+        "emails": 338,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "after": {
+        "sites": 9,
+        "contacts": 340,
+        "emails": 338,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      },
+      "delta": {
+        "sites": 1,
+        "contacts": 0,
+        "emails": 0,
+        "bioRecovered": 0,
+        "bioFetched": 0,
+        "bioCacheHits": 0
+      }
+    }
+  ],
+  "perSchool": [
+    {
+      "key": "Big Ten::Wisconsin",
+      "conference": "Big Ten",
+      "school": "Wisconsin",
+      "deltaEmails": 162,
+      "bioRecovered": 40,
+      "afterEmails": 333,
+      "baseEmails": 171
+    },
+    {
+      "key": "AAC::Charlotte",
+      "conference": "AAC",
+      "school": "Charlotte",
+      "deltaEmails": 83,
+      "bioRecovered": 0,
+      "afterEmails": 154,
+      "baseEmails": 71
+    },
+    {
+      "key": "SEC::Tennessee",
+      "conference": "SEC",
+      "school": "Tennessee",
+      "deltaEmails": 40,
+      "bioRecovered": 40,
+      "afterEmails": 376,
+      "baseEmails": 336
+    },
+    {
+      "key": "Big Ten::Indiana",
+      "conference": "Big Ten",
+      "school": "Indiana",
+      "deltaEmails": 40,
+      "bioRecovered": 40,
+      "afterEmails": 293,
+      "baseEmails": 253
+    },
+    {
+      "key": "Big 12::Kansas State",
+      "conference": "Big 12",
+      "school": "Kansas State",
+      "deltaEmails": 40,
+      "bioRecovered": 40,
+      "afterEmails": 40,
+      "baseEmails": 0
+    },
+    {
+      "key": "Ivy::Cornell",
+      "conference": "Ivy",
+      "school": "Cornell",
+      "deltaEmails": 40,
+      "bioRecovered": 40,
+      "afterEmails": 243,
+      "baseEmails": 203
+    },
+    {
+      "key": "MWC::Boise State",
+      "conference": "MWC",
+      "school": "Boise State",
+      "deltaEmails": 40,
+      "bioRecovered": 40,
+      "afterEmails": 225,
+      "baseEmails": 185
+    },
+    {
+      "key": "MAC::Central Michigan",
+      "conference": "MAC",
+      "school": "Central Michigan",
+      "deltaEmails": 40,
+      "bioRecovered": 40,
+      "afterEmails": 134,
+      "baseEmails": 94
+    },
+    {
+      "key": "CUSA::Middle Tennessee",
+      "conference": "CUSA",
+      "school": "Middle Tennessee",
+      "deltaEmails": 40,
+      "bioRecovered": 40,
+      "afterEmails": 151,
+      "baseEmails": 111
+    },
+    {
+      "key": "Big Ten::Minnesota",
+      "conference": "Big Ten",
+      "school": "Minnesota",
+      "deltaEmails": 39,
+      "bioRecovered": 39,
+      "afterEmails": 39,
+      "baseEmails": 0
+    },
+    {
+      "key": "Big Ten::Ohio State",
+      "conference": "Big Ten",
+      "school": "Ohio State",
+      "deltaEmails": 39,
+      "bioRecovered": 39,
+      "afterEmails": 542,
+      "baseEmails": 503
+    },
+    {
+      "key": "ACC::Florida State",
+      "conference": "ACC",
+      "school": "Florida State",
+      "deltaEmails": 39,
+      "bioRecovered": 39,
+      "afterEmails": 268,
+      "baseEmails": 229
+    },
+    {
+      "key": "AAC::Memphis",
+      "conference": "AAC",
+      "school": "Memphis",
+      "deltaEmails": 39,
+      "bioRecovered": 39,
+      "afterEmails": 175,
+      "baseEmails": 136
+    },
+    {
+      "key": "ACC::Pitt",
+      "conference": "ACC",
+      "school": "Pitt",
+      "deltaEmails": 38,
+      "bioRecovered": 38,
+      "afterEmails": 275,
+      "baseEmails": 237
+    },
+    {
+      "key": "ACC::North Carolina",
+      "conference": "ACC",
+      "school": "North Carolina",
+      "deltaEmails": 37,
+      "bioRecovered": 38,
+      "afterEmails": 376,
+      "baseEmails": 339
+    },
+    {
+      "key": "Big 12::Kansas",
+      "conference": "Big 12",
+      "school": "Kansas",
+      "deltaEmails": 34,
+      "bioRecovered": 34,
+      "afterEmails": 285,
+      "baseEmails": 251
+    },
+    {
+      "key": "Sun Belt::South Alabama",
+      "conference": "Sun Belt",
+      "school": "South Alabama",
+      "deltaEmails": 34,
+      "bioRecovered": 34,
+      "afterEmails": 159,
+      "baseEmails": 125
+    },
+    {
+      "key": "Ivy::Columbia",
+      "conference": "Ivy",
+      "school": "Columbia",
+      "deltaEmails": 34,
+      "bioRecovered": 0,
+      "afterEmails": 180,
+      "baseEmails": 146
+    },
+    {
+      "key": "CUSA::Louisiana Tech",
+      "conference": "CUSA",
+      "school": "Louisiana Tech",
+      "deltaEmails": 30,
+      "bioRecovered": 30,
+      "afterEmails": 39,
+      "baseEmails": 9
+    },
+    {
+      "key": "AAC::Temple",
+      "conference": "AAC",
+      "school": "Temple",
+      "deltaEmails": 27,
+      "bioRecovered": 0,
+      "afterEmails": 182,
+      "baseEmails": 155
+    },
+    {
+      "key": "Sun Belt::Georgia Southern",
+      "conference": "Sun Belt",
+      "school": "Georgia Southern",
+      "deltaEmails": 25,
+      "bioRecovered": 25,
+      "afterEmails": 144,
+      "baseEmails": 119
+    },
+    {
+      "key": "Big Sky::Weber State",
+      "conference": "Big Sky",
+      "school": "Weber State",
+      "deltaEmails": 24,
+      "bioRecovered": 24,
+      "afterEmails": 102,
+      "baseEmails": 78
+    },
+    {
+      "key": "Big Ten::Illinois",
+      "conference": "Big Ten",
+      "school": "Illinois",
+      "deltaEmails": 18,
+      "bioRecovered": 18,
+      "afterEmails": 36,
+      "baseEmails": 18
+    },
+    {
+      "key": "MWC::Utah State",
+      "conference": "MWC",
+      "school": "Utah State",
+      "deltaEmails": 17,
+      "bioRecovered": 17,
+      "afterEmails": 143,
+      "baseEmails": 126
+    },
+    {
+      "key": "Ivy::Dartmouth",
+      "conference": "Ivy",
+      "school": "Dartmouth",
+      "deltaEmails": 15,
+      "bioRecovered": 0,
+      "afterEmails": 189,
+      "baseEmails": 174
+    },
+    {
+      "key": "A-10::George Washington",
+      "conference": "A-10",
+      "school": "George Washington",
+      "deltaEmails": 13,
+      "bioRecovered": 13,
+      "afterEmails": 120,
+      "baseEmails": 107
+    },
+    {
+      "key": "Horizon::Purdue Fort Wayne",
+      "conference": "Horizon",
+      "school": "Purdue Fort Wayne",
+      "deltaEmails": 13,
+      "bioRecovered": 13,
+      "afterEmails": 63,
+      "baseEmails": 50
+    },
+    {
+      "key": "MVC::Southern Illinois",
+      "conference": "MVC",
+      "school": "Southern Illinois",
+      "deltaEmails": 12,
+      "bioRecovered": 12,
+      "afterEmails": 117,
+      "baseEmails": 105
+    },
+    {
+      "key": "Horizon::Youngstown State",
+      "conference": "Horizon",
+      "school": "Youngstown State",
+      "deltaEmails": 11,
+      "bioRecovered": 11,
+      "afterEmails": 145,
+      "baseEmails": 134
+    },
+    {
+      "key": "Big Sky::Idaho State",
+      "conference": "Big Sky",
+      "school": "Idaho State",
+      "deltaEmails": 11,
+      "bioRecovered": 11,
+      "afterEmails": 80,
+      "baseEmails": 69
+    },
+    {
+      "key": "A-10::Saint Louis",
+      "conference": "A-10",
+      "school": "Saint Louis",
+      "deltaEmails": 9,
+      "bioRecovered": 9,
+      "afterEmails": 90,
+      "baseEmails": 81
+    },
+    {
+      "key": "WCC::San Francisco",
+      "conference": "WCC",
+      "school": "San Francisco",
+      "deltaEmails": 8,
+      "bioRecovered": 8,
+      "afterEmails": 82,
+      "baseEmails": 74
+    },
+    {
+      "key": "MVC::Illinois State",
+      "conference": "MVC",
+      "school": "Illinois State",
+      "deltaEmails": 8,
+      "bioRecovered": 8,
+      "afterEmails": 152,
+      "baseEmails": 144
+    },
+    {
+      "key": "Ivy::Princeton",
+      "conference": "Ivy",
+      "school": "Princeton",
+      "deltaEmails": 7,
+      "bioRecovered": 7,
+      "afterEmails": 251,
+      "baseEmails": 244
+    },
+    {
+      "key": "SWAC::Alabama State",
+      "conference": "SWAC",
+      "school": "Alabama State",
+      "deltaEmails": 7,
+      "bioRecovered": 7,
+      "afterEmails": 78,
+      "baseEmails": 71
+    },
+    {
+      "key": "Ivy::Penn",
+      "conference": "Ivy",
+      "school": "Penn",
+      "deltaEmails": 6,
+      "bioRecovered": 6,
+      "afterEmails": 211,
+      "baseEmails": 205
+    },
+    {
+      "key": "CAA::Northeastern",
+      "conference": "CAA",
+      "school": "Northeastern",
+      "deltaEmails": 6,
+      "bioRecovered": 6,
+      "afterEmails": 109,
+      "baseEmails": 103
+    },
+    {
+      "key": "CAA::William & Mary",
+      "conference": "CAA",
+      "school": "William & Mary",
+      "deltaEmails": 6,
+      "bioRecovered": 6,
+      "afterEmails": 129,
+      "baseEmails": 123
+    },
+    {
+      "key": "MWC::Hawaii",
+      "conference": "MWC",
+      "school": "Hawaii",
+      "deltaEmails": 6,
+      "bioRecovered": 6,
+      "afterEmails": 140,
+      "baseEmails": 134
+    },
+    {
+      "key": "MWC::Wyoming",
+      "conference": "MWC",
+      "school": "Wyoming",
+      "deltaEmails": 6,
+      "bioRecovered": 6,
+      "afterEmails": 173,
+      "baseEmails": 167
+    },
+    {
+      "key": "Sun Belt::Appalachian State",
+      "conference": "Sun Belt",
+      "school": "Appalachian State",
+      "deltaEmails": 6,
+      "bioRecovered": 6,
+      "afterEmails": 137,
+      "baseEmails": 131
+    },
+    {
+      "key": "MAC::Ohio",
+      "conference": "MAC",
+      "school": "Ohio",
+      "deltaEmails": 5,
+      "bioRecovered": 5,
+      "afterEmails": 135,
+      "baseEmails": 130
+    },
+    {
+      "key": "MAC::Northern Illinois",
+      "conference": "MAC",
+      "school": "Northern Illinois",
+      "deltaEmails": 5,
+      "bioRecovered": 5,
+      "afterEmails": 114,
+      "baseEmails": 109
+    },
+    {
+      "key": "A-10::Dayton",
+      "conference": "A-10",
+      "school": "Dayton",
+      "deltaEmails": 5,
+      "bioRecovered": 5,
+      "afterEmails": 130,
+      "baseEmails": 125
+    },
+    {
+      "key": "SWAC::Arkansas-Pine Bluff",
+      "conference": "SWAC",
+      "school": "Arkansas-Pine Bluff",
+      "deltaEmails": 5,
+      "bioRecovered": 5,
+      "afterEmails": 49,
+      "baseEmails": 44
+    },
+    {
+      "key": "Ivy::Yale",
+      "conference": "Ivy",
+      "school": "Yale",
+      "deltaEmails": 4,
+      "bioRecovered": 4,
+      "afterEmails": 195,
+      "baseEmails": 191
+    },
+    {
+      "key": "AAC::Navy",
+      "conference": "AAC",
+      "school": "Navy",
+      "deltaEmails": 4,
+      "bioRecovered": 4,
+      "afterEmails": 231,
+      "baseEmails": 227
+    },
+    {
+      "key": "A-10::Rhode Island",
+      "conference": "A-10",
+      "school": "Rhode Island",
+      "deltaEmails": 4,
+      "bioRecovered": 4,
+      "afterEmails": 149,
+      "baseEmails": 145
+    },
+    {
+      "key": "A-10::VCU",
+      "conference": "A-10",
+      "school": "VCU",
+      "deltaEmails": 4,
+      "bioRecovered": 4,
+      "afterEmails": 125,
+      "baseEmails": 121
+    },
+    {
+      "key": "SWAC::Texas Southern",
+      "conference": "SWAC",
+      "school": "Texas Southern",
+      "deltaEmails": 4,
+      "bioRecovered": 4,
+      "afterEmails": 66,
+      "baseEmails": 62
+    },
+    {
+      "key": "Big Sky::Southern Utah",
+      "conference": "Big Sky",
+      "school": "Southern Utah",
+      "deltaEmails": 4,
+      "bioRecovered": 4,
+      "afterEmails": 82,
+      "baseEmails": 78
+    },
+    {
+      "key": "AAC::South Florida",
+      "conference": "AAC",
+      "school": "South Florida",
+      "deltaEmails": 3,
+      "bioRecovered": 3,
+      "afterEmails": 186,
+      "baseEmails": 183
+    },
+    {
+      "key": "MWC::UNLV",
+      "conference": "MWC",
+      "school": "UNLV",
+      "deltaEmails": 3,
+      "bioRecovered": 3,
+      "afterEmails": 181,
+      "baseEmails": 178
+    },
+    {
+      "key": "CUSA::FIU",
+      "conference": "CUSA",
+      "school": "FIU",
+      "deltaEmails": 3,
+      "bioRecovered": 3,
+      "afterEmails": 115,
+      "baseEmails": 112
+    },
+    {
+      "key": "CUSA::UTEP",
+      "conference": "CUSA",
+      "school": "UTEP",
+      "deltaEmails": 3,
+      "bioRecovered": 3,
+      "afterEmails": 100,
+      "baseEmails": 97
+    },
+    {
+      "key": "CUSA::Western Kentucky",
+      "conference": "CUSA",
+      "school": "Western Kentucky",
+      "deltaEmails": 3,
+      "bioRecovered": 3,
+      "afterEmails": 138,
+      "baseEmails": 135
+    },
+    {
+      "key": "SWAC::Jackson State",
+      "conference": "SWAC",
+      "school": "Jackson State",
+      "deltaEmails": 3,
+      "bioRecovered": 3,
+      "afterEmails": 63,
+      "baseEmails": 60
+    },
+    {
+      "key": "Horizon::IUPUI",
+      "conference": "Horizon",
+      "school": "IUPUI",
+      "deltaEmails": 3,
+      "bioRecovered": 3,
+      "afterEmails": 57,
+      "baseEmails": 54
+    },
+    {
+      "key": "WCC::San Diego",
+      "conference": "WCC",
+      "school": "San Diego",
+      "deltaEmails": 3,
+      "bioRecovered": 0,
+      "afterEmails": 99,
+      "baseEmails": 96
+    },
+    {
+      "key": "Ivy::Harvard",
+      "conference": "Ivy",
+      "school": "Harvard",
+      "deltaEmails": 2,
+      "bioRecovered": 2,
+      "afterEmails": 252,
+      "baseEmails": 250
+    },
+    {
+      "key": "CAA::Towson",
+      "conference": "CAA",
+      "school": "Towson",
+      "deltaEmails": 2,
+      "bioRecovered": 2,
+      "afterEmails": 145,
+      "baseEmails": 143
+    },
+    {
+      "key": "MWC::New Mexico",
+      "conference": "MWC",
+      "school": "New Mexico",
+      "deltaEmails": 2,
+      "bioRecovered": 2,
+      "afterEmails": 143,
+      "baseEmails": 141
+    },
+    {
+      "key": "A-10::St. Bonaventure",
+      "conference": "A-10",
+      "school": "St. Bonaventure",
+      "deltaEmails": 2,
+      "bioRecovered": 2,
+      "afterEmails": 68,
+      "baseEmails": 66
+    },
+    {
+      "key": "WCC::Santa Clara",
+      "conference": "WCC",
+      "school": "Santa Clara",
+      "deltaEmails": 2,
+      "bioRecovered": 2,
+      "afterEmails": 123,
+      "baseEmails": 121
+    },
+    {
+      "key": "MEAC::NC Central",
+      "conference": "MEAC",
+      "school": "NC Central",
+      "deltaEmails": 2,
+      "bioRecovered": 2,
+      "afterEmails": 71,
+      "baseEmails": 69
+    },
+    {
+      "key": "SWAC::Prairie View A&M",
+      "conference": "SWAC",
+      "school": "Prairie View A&M",
+      "deltaEmails": 2,
+      "bioRecovered": 2,
+      "afterEmails": 63,
+      "baseEmails": 61
+    },
+    {
+      "key": "Summit::North Dakota",
+      "conference": "Summit",
+      "school": "North Dakota",
+      "deltaEmails": 2,
+      "bioRecovered": 2,
+      "afterEmails": 118,
+      "baseEmails": 116
+    },
+    {
+      "key": "Summit::Western Illinois",
+      "conference": "Summit",
+      "school": "Western Illinois",
+      "deltaEmails": 2,
+      "bioRecovered": 2,
+      "afterEmails": 74,
+      "baseEmails": 72
+    },
+    {
+      "key": "Big Sky::Eastern Washington",
+      "conference": "Big Sky",
+      "school": "Eastern Washington",
+      "deltaEmails": 2,
+      "bioRecovered": 2,
+      "afterEmails": 58,
+      "baseEmails": 56
+    },
+    {
+      "key": "Big Sky::Sacramento State",
+      "conference": "Big Sky",
+      "school": "Sacramento State",
+      "deltaEmails": 2,
+      "bioRecovered": 2,
+      "afterEmails": 132,
+      "baseEmails": 130
+    },
+    {
+      "key": "Big Ten::Maryland",
+      "conference": "Big Ten",
+      "school": "Maryland",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 286,
+      "baseEmails": 285
+    },
+    {
+      "key": "ACC::Clemson",
+      "conference": "ACC",
+      "school": "Clemson",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 277,
+      "baseEmails": 276
+    },
+    {
+      "key": "CAA::Campbell",
+      "conference": "CAA",
+      "school": "Campbell",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 105,
+      "baseEmails": 104
+    },
+    {
+      "key": "CAA::Hampton",
+      "conference": "CAA",
+      "school": "Hampton",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 96,
+      "baseEmails": 95
+    },
+    {
+      "key": "CAA::North Carolina A&T",
+      "conference": "CAA",
+      "school": "North Carolina A&T",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 77,
+      "baseEmails": 76
+    },
+    {
+      "key": "CAA::Monmouth",
+      "conference": "CAA",
+      "school": "Monmouth",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 103,
+      "baseEmails": 102
+    },
+    {
+      "key": "CAA::UNC Wilmington",
+      "conference": "CAA",
+      "school": "UNC Wilmington",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 105,
+      "baseEmails": 104
+    },
+    {
+      "key": "Sun Belt::Georgia State",
+      "conference": "Sun Belt",
+      "school": "Georgia State",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 102,
+      "baseEmails": 101
+    },
+    {
+      "key": "Sun Belt::Marshall",
+      "conference": "Sun Belt",
+      "school": "Marshall",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 159,
+      "baseEmails": 158
+    },
+    {
+      "key": "Sun Belt::Texas State",
+      "conference": "Sun Belt",
+      "school": "Texas State",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 113,
+      "baseEmails": 112
+    },
+    {
+      "key": "CUSA::Jacksonville State",
+      "conference": "CUSA",
+      "school": "Jacksonville State",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 111,
+      "baseEmails": 110
+    },
+    {
+      "key": "MAC::Western Michigan",
+      "conference": "MAC",
+      "school": "Western Michigan",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 119,
+      "baseEmails": 118
+    },
+    {
+      "key": "A-10::Duquesne",
+      "conference": "A-10",
+      "school": "Duquesne",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 97,
+      "baseEmails": 96
+    },
+    {
+      "key": "A-10::La Salle",
+      "conference": "A-10",
+      "school": "La Salle",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 85,
+      "baseEmails": 84
+    },
+    {
+      "key": "A-10::George Mason",
+      "conference": "A-10",
+      "school": "George Mason",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 123,
+      "baseEmails": 122
+    },
+    {
+      "key": "WCC::Gonzaga",
+      "conference": "WCC",
+      "school": "Gonzaga",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 110,
+      "baseEmails": 109
+    },
+    {
+      "key": "WCC::Portland",
+      "conference": "WCC",
+      "school": "Portland",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 93,
+      "baseEmails": 92
+    },
+    {
+      "key": "MEAC::Delaware State",
+      "conference": "MEAC",
+      "school": "Delaware State",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 53,
+      "baseEmails": 52
+    },
+    {
+      "key": "MEAC::Howard",
+      "conference": "MEAC",
+      "school": "Howard",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 75,
+      "baseEmails": 74
+    },
+    {
+      "key": "SWAC::Alabama A&M",
+      "conference": "SWAC",
+      "school": "Alabama A&M",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 54,
+      "baseEmails": 53
+    },
+    {
+      "key": "SWAC::Southern",
+      "conference": "SWAC",
+      "school": "Southern",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 69,
+      "baseEmails": 68
+    },
+    {
+      "key": "Horizon::Milwaukee",
+      "conference": "Horizon",
+      "school": "Milwaukee",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 69,
+      "baseEmails": 68
+    },
+    {
+      "key": "Horizon::Oakland",
+      "conference": "Horizon",
+      "school": "Oakland",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 84,
+      "baseEmails": 83
+    },
+    {
+      "key": "MVC::Drake",
+      "conference": "MVC",
+      "school": "Drake",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 99,
+      "baseEmails": 98
+    },
+    {
+      "key": "MVC::Missouri State",
+      "conference": "MVC",
+      "school": "Missouri State",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 124,
+      "baseEmails": 123
+    },
+    {
+      "key": "MVC::Valparaiso",
+      "conference": "MVC",
+      "school": "Valparaiso",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 99,
+      "baseEmails": 98
+    },
+    {
+      "key": "MVC::UIC",
+      "conference": "MVC",
+      "school": "UIC",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 95,
+      "baseEmails": 94
+    },
+    {
+      "key": "Summit::Denver",
+      "conference": "Summit",
+      "school": "Denver",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 121,
+      "baseEmails": 120
+    },
+    {
+      "key": "Summit::Omaha",
+      "conference": "Summit",
+      "school": "Omaha",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 122,
+      "baseEmails": 121
+    },
+    {
+      "key": "Big Sky::UC Davis",
+      "conference": "Big Sky",
+      "school": "UC Davis",
+      "deltaEmails": 1,
+      "bioRecovered": 1,
+      "afterEmails": 141,
+      "baseEmails": 140
+    },
+    {
+      "key": "Big 12::West Virginia",
+      "conference": "Big 12",
+      "school": "West Virginia",
+      "deltaEmails": -1,
+      "bioRecovered": 0,
+      "afterEmails": 229,
+      "baseEmails": 230
+    },
+    {
+      "key": "Sun Belt::Coastal Carolina",
+      "conference": "Sun Belt",
+      "school": "Coastal Carolina",
+      "deltaEmails": -3,
+      "bioRecovered": 0,
+      "afterEmails": 133,
+      "baseEmails": 136
+    },
+    {
+      "key": "CUSA::Liberty",
+      "conference": "CUSA",
+      "school": "Liberty",
+      "deltaEmails": -33,
+      "bioRecovered": 0,
+      "afterEmails": 162,
+      "baseEmails": 195
+    },
+    {
+      "key": "SEC::Ole Miss",
+      "conference": "SEC",
+      "school": "Ole Miss",
+      "deltaEmails": -290,
+      "bioRecovered": 0,
+      "afterEmails": 0,
+      "baseEmails": 290
+    }
+  ]
+}

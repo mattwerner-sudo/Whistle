@@ -1,0 +1,62 @@
+# Power-5 + Big sites that may match presto/table patterns through HTML substrings
+https://hawkeyesports.com/staff-directory
+https://gophersports.com/staff-directory
+https://msuspartans.com/staff-directory
+https://huskers.com/staff-directory
+https://nusports.com/staff-directory
+https://ohiostatebuckeyes.com/staff-directory
+https://gopsusports.com/staff-directory
+https://purduesports.com/staff-directory
+https://scarletknights.com/staff-directory
+https://uwbadgers.com/staff-directory
+https://iuhoosiers.com/staff-directory
+https://fightingillini.com/staff-directory
+https://umterps.com/staff-directory
+https://mgoblue.com/sports/2017/6/16/staff-directory-alpha
+# Pac
+https://thesundevils.com/staff-directory
+https://calbears.com/staff-directory
+https://cubuffs.com/staff-directory
+https://goducks.com/staff-directory
+https://gostanford.com/staff-directory
+https://uclabruins.com/staff-directory
+https://usctrojans.com/staff-directory
+https://gocougs.com/staff-directory
+https://utahutes.com/staff-directory
+# AAC / G5
+https://goarmywestpoint.com/staff-directory
+https://navysports.com/staff-directory
+https://goairforcefalcons.com/staff-directory
+https://owlsports.com/staff-directory
+https://ucfknights.com/staff-directory
+https://usfbullsports.com/staff-directory
+https://goarmywestpoint.com/staff-directory
+https://gomocs.com/staff-directory
+https://ecupirates.com/staff-directory
+https://goccusports.com/staff-directory
+# WCC / MWC / smaller
+https://wsucougars.com/staff-directory
+https://nevadawolfpack.com/staff-directory
+https://goaztecs.com/staff-directory
+https://hawaiiathletics.com/staff-directory
+https://goutahstateaggies.com/staff-directory
+https://goboise.com/staff-directory
+https://broncosports.com/staff-directory
+# Ivy / Patriot
+https://goprincetontigers.com/staff-directory
+https://gocrimson.com/staff-directory
+https://yalebulldogs.com/staff-directory
+https://brownbears.com/staff-directory
+https://cornellbigred.com/staff-directory
+https://athletics.dartmouth.edu/staff-directory
+https://pennathletics.com/staff-directory
+https://columbialions.com/staff-directory
+# CAA / Patriot
+https://hofstrapride.com/staff-directory
+https://hofstrasports.com/staff-directory
+https://drexeldragons.com/staff-directory
+https://elonphoenix.com/staff-directory
+https://hopkinssports.com/staff-directory
+https://gopack.com/staff-directory
+https://goheels.com/staff-directory
+https://goduke.com/staff-directory
