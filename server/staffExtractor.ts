@@ -11,6 +11,24 @@ import {
 } from './lib/known-directory-urls';
 import { needsJavaScriptRendering } from './lib/scraper-config';
 
+// Playwright's own per-step timeouts (goto, waitForSelector, etc.) only bound
+// that individual call — nothing bounds the sum of an entire fetch flow. On a
+// pathological page, that lets one job hang forever, permanently occupying a
+// pLimit queue slot. Race the whole flow against a hard wall-clock timeout so
+// a hang degrades to a logged failure instead of an unrecoverable stall.
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      console.error(`[Extraction] ${label} exceeded ${ms}ms wall-clock timeout — abandoning`);
+      resolve(null);
+    }, ms);
+    promise.then(
+      (result) => { clearTimeout(timer); resolve(result); },
+      (err) => { clearTimeout(timer); console.error(`[Extraction] ${label} failed:`, err); resolve(null); },
+    );
+  });
+}
+
 const CORS_PROXIES = [
   (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
   (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
@@ -18,9 +36,16 @@ const CORS_PROXIES = [
 
 async function fetchWithProxy(url: string): Promise<string | null> {
   for (const proxyFn of CORS_PROXIES) {
+    // Node's fetch has no built-in timeout — a stalled third-party proxy
+    // (these are free, unaffiliated services with no uptime guarantee) hangs
+    // this call forever with no error, which previously stalled the entire
+    // extraction job (and its pLimit queue slot) indefinitely. Bound it.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15_000);
     try {
       const proxyUrl = proxyFn(url);
       const response = await fetch(proxyUrl, {
+        signal: controller.signal,
         headers: {
           'User-Agent': getRandomUserAgent(),
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -32,7 +57,12 @@ async function fetchWithProxy(url: string): Promise<string | null> {
         return await response.text();
       }
     } catch (e) {
+      if ((e as Error)?.name === 'AbortError') {
+        console.warn(`[Extraction] CORS proxy timed out after 15s: ${proxyFn(url)}`);
+      }
       continue;
+    } finally {
+      clearTimeout(timer);
     }
   }
   return null;
@@ -1457,7 +1487,7 @@ export async function extractStaffFromUrl(url: string, usePlaywrightFallback = t
 
   if (usePlaywrightFallback) {
     console.log(`[Extraction] Playwright for ${url} (reason: ${fetchReason})`);
-    const playwrightFetch = await fetchWithPlaywright(url);
+    const playwrightFetch = await withTimeout(fetchWithPlaywright(url), 60_000, `fetchWithPlaywright(${url})`);
     if (playwrightFetch) {
       lastHtml = playwrightFetch.html;
       resolvedUrl = playwrightFetch.resolvedUrl;
@@ -1494,7 +1524,7 @@ export async function extractStaffFromUrl(url: string, usePlaywrightFallback = t
     if (shouldRetry) {
       const retryReason = !bestResult || bestResult.contacts.length === 0 ? 'zero-contacts' : 'low-yield';
       console.log(`[Extraction] ${retryReason} (${bestResult?.contacts.length ?? 0} contacts) — retrying with extended Playwright wait: ${url}`);
-      const extendedFetch = await fetchWithPlaywrightExtended(url);
+      const extendedFetch = await withTimeout(fetchWithPlaywrightExtended(url), 90_000, `fetchWithPlaywrightExtended(${url})`);
       if (extendedFetch) {
         const retryResult = parseHtmlForContacts(extendedFetch.html);
         const retryImproves = !bestResult
