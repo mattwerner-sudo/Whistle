@@ -424,6 +424,12 @@ async function processExtractionJob(jobId: number): Promise<void> {
       
       if (isParserDisabled(parserName)) {
         logs.push(`[${directory.schoolName}] Parser ${parserName} disabled (circuit breaker open)`);
+        // The school was never actually attempted — the circuit breaker is a
+        // transient, parser-wide cooldown, not a fact about this school. Reset
+        // it back to "pending" (from "processing", set above) so it's picked
+        // up on the next attempt rather than stuck showing mid-extraction
+        // forever, which was silently happening before this fix.
+        await storage.updateSchoolDirectoryStatus(schoolId, "pending");
         processed++;
         continue;
       }
