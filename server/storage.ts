@@ -26,7 +26,7 @@ import {
   type ChangeType
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, ilike, or, and, sql, desc, asc, gte, lte } from "drizzle-orm";
+import { eq, ilike, or, and, sql, desc, asc, gte, lte, isNull, isNotNull, lt } from "drizzle-orm";
 import { createHash } from "crypto";
 import { nameSimilarity as nameSimilarityFn } from "./staffExtractor";
 
@@ -58,6 +58,8 @@ export interface IStorage {
   upsertStaffMember(member: InsertStaffMember): Promise<StaffMember>;
   bulkUpsertStaffMembers(members: InsertStaffMember[]): Promise<void>;
   deleteStaffMembersBySchool(schoolId: string): Promise<void>;
+  reportStaffInaccurate(id: number): Promise<StaffMember | undefined>;
+  reverifyStaffEmails(limit?: number, opts?: { force?: boolean; staleAfterMs?: number }): Promise<{ checked: number; changed: number }>;
   
   getStats(): Promise<{
     totalSchools: number;
@@ -499,6 +501,95 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(staffMembers)
       .where(eq(staffMembers.schoolId, schoolId));
+  }
+
+  // Contact-accuracy feedback: a user reported this record as wrong. Downgrade
+  // confidence, clear the verification (so it re-verifies), and flag it.
+  async reportStaffInaccurate(id: number): Promise<StaffMember | undefined> {
+    const [existing] = await db.select().from(staffMembers).where(eq(staffMembers.id, id));
+    if (!existing) return undefined;
+
+    // Idempotent at the record level: once a contact is flagged, further reports
+    // are no-ops until a re-verification pass clears the flag. This prevents
+    // repeated reports from multiplicatively driving confidence toward zero.
+    if (existing.reportedInaccurateAt) return existing;
+
+    const current = existing.confidence;
+    // Lower both the derived email score AND the immutable base so the penalty
+    // survives a later verification recompute (a "wrong" contact stays low even
+    // if its domain is still technically deliverable). A genuine re-extraction
+    // rebuilds confidence from scratch and clears the flag.
+    const current2 = current
+      ? { ...current, emailBase: Math.round((current.emailBase ?? current.email) * 0.3) }
+      : current;
+    const downgraded = current2
+      ? { ...current2, email: Math.round(current2.email * 0.3), overall: Math.max(0, Math.round(current2.overall * 0.5)) }
+      : current2;
+
+    const [updated] = await db
+      .update(staffMembers)
+      .set({
+        confidence: downgraded,
+        emailVerificationStatus: "unverified",
+        emailVerifiedAt: null,
+        reportedInaccurateAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(staffMembers.id, id))
+      .returning();
+    return updated;
+  }
+
+  async reverifyStaffEmails(
+    limit: number = 100,
+    opts: { force?: boolean; staleAfterMs?: number } = {},
+  ): Promise<{ checked: number; changed: number }> {
+    const { verifyEmail, applyVerificationToConfidence } = await import("./lib/email-verification");
+    const staleAfterMs = opts.staleAfterMs ?? 30 * 24 * 60 * 60 * 1000;
+    const staleCutoff = new Date(Date.now() - staleAfterMs);
+    const eligibility = opts.force
+      ? sql`${staffMembers.email} <> ''`
+      : and(
+          sql`${staffMembers.email} <> ''`,
+          or(
+            isNull(staffMembers.emailVerifiedAt),
+            lt(staffMembers.emailVerifiedAt, staleCutoff),
+            // Contacts flagged inaccurate get re-checked even if recently verified.
+            isNotNull(staffMembers.reportedInaccurateAt),
+          ),
+        );
+    const rows = await db
+      .select()
+      .from(staffMembers)
+      .where(eligibility)
+      .limit(limit);
+
+    let checked = 0;
+    let changed = 0;
+    for (const row of rows) {
+      try {
+        const result = await verifyEmail(row.email);
+        checked++;
+        const newConfidence = applyVerificationToConfidence(row.confidence, result.status) ?? row.confidence;
+        if (row.emailVerificationStatus !== result.status) changed++;
+        await db
+          .update(staffMembers)
+          .set({
+            emailVerificationStatus: result.status,
+            emailVerifiedAt: result.checkedAt,
+            confidence: newConfidence,
+            // A completed verification pass re-opens the record for future
+            // reports. The report's confidence penalty still persists via the
+            // lowered emailBase, so clearing the flag doesn't restore the score.
+            reportedInaccurateAt: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(staffMembers.id, row.id));
+      } catch (err) {
+        console.error(`[Reverify] Failed for staff ${row.id}:`, err);
+      }
+    }
+    return { checked, changed };
   }
 
   async getStats(): Promise<{

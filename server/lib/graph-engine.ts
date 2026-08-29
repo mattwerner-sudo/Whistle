@@ -30,7 +30,7 @@ Return the score and a one-sentence reason.`;
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-flash-latest",
       contents: prompt,
       config: {
         // Structured output: the model is constrained to this shape, so a

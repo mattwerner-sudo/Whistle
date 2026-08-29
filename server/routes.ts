@@ -366,7 +366,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api/v1/linkedin", linkedinRoutes);
 
   // Fetch URL endpoint - proxy to bypass CORS
-  app.post("/api/fetch-url", requireUser, async (req, res) => {
+  app.post("/api/fetch-url", requireAdmin, async (req, res) => {
     try {
       const { url } = fetchUrlRequestSchema.parse(req.body);
 
@@ -423,7 +423,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Fetch URL with JavaScript rendering (Playwright)
-  app.post("/api/fetch-url-rendered", requireUser, async (req, res) => {
+  app.post("/api/fetch-url-rendered", requireAdmin, async (req, res) => {
     try {
       const { url } = fetchUrlRequestSchema.parse(req.body);
 
@@ -846,7 +846,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get overall stats
-  app.get("/api/staff/stats", async (_req, res) => {
+  app.get("/api/staff/stats", requireUser, async (_req, res) => {
     try {
       const stats = await storage.getStats();
       res.json(stats);
@@ -855,7 +855,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: error.message || "Failed to get stats" });
     }
   });
-  
+
+  // Contact-accuracy feedback loop: a signed-in user reports a staff record as
+  // inaccurate. Downgrades confidence and flags it for re-verification.
+  app.post("/api/staff/:id/report", requireUser, async (req: UserRequest, res) => {
+    try {
+      const staffId = parseInt(req.params.id, 10);
+      if (!staffId || Number.isNaN(staffId)) {
+        return res.status(400).json({ error: "Invalid staff id" });
+      }
+      const updated = await storage.reportStaffInaccurate(staffId);
+      if (!updated) {
+        return res.status(404).json({ error: "Staff member not found" });
+      }
+      await storage.logEvent({
+        eventType: "contact_reported_inaccurate",
+        details: { staffId, userId: req.user!.id },
+      });
+      res.json({ success: true, staff: updated });
+    } catch (error: any) {
+      console.error("Report inaccurate contact error:", error);
+      res.status(500).json({ error: error.message || "Failed to report contact" });
+    }
+  });
+
   // Extract staff from a specific school (async job-based for multi-user support)
   app.post("/api/staff/extract/:schoolId", async (req, res) => {
     try {
@@ -1261,7 +1284,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  app.get("/api/credits", async (_req, res) => {
+  app.get("/api/credits", requireAdmin, async (_req, res) => {
     try {
       res.json({
         totalCredits: INTERNAL_DEFAULT_CREDITS,
@@ -1326,7 +1349,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Create a new extraction job
-  app.post("/api/jobs", async (req, res) => {
+  app.post("/api/jobs", requireAdmin, async (req, res) => {
     try {
       const parsed = createJobSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -1380,7 +1403,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get recent jobs
-  app.get("/api/jobs", requireUser, async (req, res) => {
+  app.get("/api/jobs", requireAdmin, async (req, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 10;
       const jobs = await storage.getRecentJobs(limit);
@@ -1392,7 +1415,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get job by ID
-  app.get("/api/jobs/:id", requireUser, async (req, res) => {
+  app.get("/api/jobs/:id", requireAdmin, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
@@ -1412,7 +1435,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get queue status
-  app.get("/api/jobs/queue/status", requireUser, async (_req, res) => {
+  app.get("/api/jobs/queue/status", requireAdmin, async (_req, res) => {
     try {
       res.json(getQueueStatus());
     } catch (error: any) {
@@ -1422,7 +1445,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Health metrics endpoint - extraction statistics
-  app.get("/api/health/metrics", async (_req, res) => {
+  app.get("/api/health/metrics", requireAdmin, async (_req, res) => {
     try {
       const { healthMonitor } = await import("./lib/health-monitor");
       const stats = healthMonitor.getStats();
@@ -1438,7 +1461,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Scraper health endpoint - circuit breaker, parser metrics, and validation stats
-  app.get("/api/scraper/health", async (_req, res) => {
+  app.get("/api/scraper/health", requireAdmin, async (_req, res) => {
     try {
       const { getHealthSnapshot } = await import("./lib/scraper-health");
       const snapshot = getHealthSnapshot();
@@ -1454,13 +1477,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Data Health Metrics API - Database freshness monitoring
-  app.get("/api/data-health", async (_req, res) => {
+  app.get("/api/data-health", requireAdmin, async (_req, res) => {
     try {
       const { getDataHealthMetrics } = await import("./lib/data-health");
+      const { getReverifyStatus } = await import("./lib/reverify-scheduler");
       const metrics = await getDataHealthMetrics();
       res.json({
         status: "ok",
         ...metrics,
+        emailVerification: getReverifyStatus(),
         timestamp: new Date().toISOString(),
       });
     } catch (error: any) {
@@ -1470,7 +1495,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Refresh stale schools - queue stale schools for re-extraction
-  app.post("/api/data-health/refresh-stale", async (req, res) => {
+  app.post("/api/data-health/refresh-stale", requireAdmin, async (req, res) => {
     try {
       const { tier, limit = 50 } = req.body || {};
       
@@ -1537,7 +1562,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/data-health/retry-failed", async (req, res) => {
+  app.post("/api/data-health/retry-failed", requireAdmin, async (req, res) => {
     try {
       const { failureReason, limit = 50, conference, includeNeedsReview = false } = req.body || {};
       
@@ -1728,6 +1753,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Staff cleanup error:", error);
       res.status(500).json({ error: error.message || "Failed to run staff cleanup" });
+    }
+  });
+
+  app.post("/api/admin/staff/reverify", requireAdmin, async (req, res) => {
+    try {
+      const requested = Number(req.body?.limit);
+      const limit = Number.isFinite(requested) ? Math.min(Math.max(1, Math.floor(requested)), 500) : 100;
+      const force = req.body?.force === true;
+      const result = await storage.reverifyStaffEmails(limit, { force });
+      res.json({ success: true, ...result });
+    } catch (error: any) {
+      console.error("Reverify staff emails error:", error);
+      res.status(500).json({ error: error.message || "Failed to reverify staff emails" });
     }
   });
 
@@ -1966,7 +2004,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get all lists
-  app.get("/api/lists", async (req, res) => {
+  app.get("/api/lists", requireUser, async (req: UserRequest, res) => {
     try {
       const lists = await storage.getSavedLists();
       res.json(lists);
@@ -1993,7 +2031,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get single list with items
-  app.get("/api/lists/:id", async (req, res) => {
+  app.get("/api/lists/:id", requireUser, async (req: UserRequest, res) => {
     try {
       const listId = parseInt(req.params.id);
       if (isNaN(listId) || listId <= 0) {
@@ -2045,7 +2083,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Remove contact from list
-  app.delete("/api/lists/:id/remove/:staffId", async (req, res) => {
+  app.delete("/api/lists/:id/remove/:staffId", requireUser, async (req: UserRequest, res) => {
     try {
       const listId = parseInt(req.params.id);
       const staffId = parseInt(req.params.staffId);
@@ -2061,7 +2099,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Delete list
-  app.delete("/api/lists/:id", async (req, res) => {
+  app.delete("/api/lists/:id", requireUser, async (req: UserRequest, res) => {
     try {
       const listId = parseInt(req.params.id);
       if (isNaN(listId) || listId <= 0) {

@@ -5,6 +5,7 @@ import pgSession from "connect-pg-simple";
 import { runMigrations } from 'stripe-replit-sync';
 import { registerRoutes } from "./routes";
 import { initCron } from "./lib/cron";
+import { startReverifyScheduler } from "./lib/reverify-scheduler";
 import { setupVite, serveStatic, log } from "./vite";
 import { pool } from "./db";
 import { getStripeSync } from "./stripeClient";
@@ -217,6 +218,8 @@ async function initStripe() {
       ...(process.platform === "linux" ? { reusePort: true } : {}),
     }, () => {
       log(`serving on port ${port}`);
+      // Started after the server is listening so it never delays boot.
+      startReverifyScheduler();
     });
   } catch (error) {
     console.error('Failed to start server:', error);

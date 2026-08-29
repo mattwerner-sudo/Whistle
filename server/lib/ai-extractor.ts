@@ -89,7 +89,7 @@ ${truncatedHtml}
 `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-flash-latest",
       contents: prompt,
     });
 
@@ -289,7 +289,7 @@ Area definitions:
 `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-flash-latest",
       contents: prompt,
     });
 
@@ -443,7 +443,7 @@ Return an empty array [] if no tags apply.
 `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-flash-latest",
       contents: prompt,
     });
 
@@ -499,7 +499,7 @@ If the pattern is unclear or you are not confident, return exactly: null`;
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-flash-latest",
       contents: prompt,
     });
     const text = (response.text ?? "").trim().toLowerCase();

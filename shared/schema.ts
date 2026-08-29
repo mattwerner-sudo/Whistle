@@ -75,10 +75,17 @@ export const staffMembers = pgTable("staff_members", {
     email: number;
     phone: number;
     overall: number;
+    emailBase?: number;
   }>(),
   // Provenance of the email address, per the data-quality standard in CLAUDE.md:
   // 'confirmed' (bounce-verified) | 'extracted' (AI-parsed from page) | 'inferred' (guessed from school pattern)
   emailConfidence: text("email_confidence"),
+  // Email deliverability verification (free tier: DNS/MX + heuristics, no SMTP probe).
+  // Values: 'verified' | 'risky' | 'undeliverable' | 'unverified'. null = never checked.
+  emailVerificationStatus: text("email_verification_status"),
+  emailVerifiedAt: timestamp("email_verified_at"),
+  // Contact-accuracy feedback loop: set when a user reports the contact as wrong.
+  reportedInaccurateAt: timestamp("reported_inaccurate_at"),
   // GTM Intelligence: Persona Mapping Fields
   buyerPersona: text("buyer_persona"), // 'champion', 'signer', 'blocker', 'influencer', 'user'
   functionalArea: text("functional_area"), // 'executive', 'operations', 'finance', 'external', 'performance', 'general'
@@ -478,6 +485,9 @@ export type SchoolDirectory = typeof schoolDirectories.$inferSelect;
 export type InsertSchoolDirectory = z.infer<typeof insertSchoolDirectorySchema>;
 export type StaffMember = typeof staffMembers.$inferSelect;
 export type InsertStaffMember = z.infer<typeof insertStaffMemberSchema>;
+
+// Email deliverability verification status (free tier: DNS/MX + heuristics).
+export type EmailVerificationStatus = "verified" | "risky" | "undeliverable" | "unverified";
 export type UsageEvent = typeof usageEvents.$inferSelect;
 export type InsertUsageEvent = z.infer<typeof insertUsageEventSchema>;
 export type ExtractionJob = typeof extractionJobs.$inferSelect;

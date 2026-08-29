@@ -48,7 +48,7 @@ you cannot determine).`;
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-flash-latest",
       contents: prompt,
       config: {
         // Structured output: "no match" is a typed field, not a magic string,
