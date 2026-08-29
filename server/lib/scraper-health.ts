@@ -61,7 +61,15 @@ const errorCounts = {
   other: 0,
 };
 
-const CIRCUIT_BREAKER_THRESHOLD = 3;
+// The "generic" bucket covers hundreds of genuinely different real-world
+// sites, not one parser's health. Empirically, real per-site success for
+// generic is ~70-75% once resource contention is controlled for — at that
+// rate, hitting 3 failures in a row somewhere in a 30-school batch is common
+// by ordinary variance alone (schools are processed in a fixed order, and a
+// run of harder sites can cluster), not evidence the parser itself broke.
+// A too-low threshold was observed tripping mid-batch repeatedly, each time
+// idling every *other*, otherwise-fine site in the bucket for 30 minutes.
+const CIRCUIT_BREAKER_THRESHOLD = 8;
 const CIRCUIT_BREAKER_RESET_MS = 30 * 60 * 1000;
 
 const USER_AGENTS = [
