@@ -69,7 +69,7 @@ ${dataSummary}
 Provide the analysis in markdown format with clear headers and bullet points.`;
 
   const response = await ai!.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: "gemini-flash-latest",
     contents: prompt,
   });
 
@@ -112,7 +112,7 @@ Input:
 ${JSON.stringify(contacts, null, 2)}`;
 
   const response = await ai!.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: "gemini-flash-latest",
     contents: prompt,
   });
 
@@ -188,7 +188,7 @@ Return the response as JSON in this exact format (no markdown):
 }`;
 
   const response = await ai!.models.generateContent({
-    model: "gemini-2.5-pro",
+    model: "gemini-flash-latest",
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -270,7 +270,7 @@ Brief overview of their position and likely responsibilities
 A natural conversation starter based on their role`;
 
   const response = await ai!.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: "gemini-flash-latest",
     contents: prompt,
   });
 

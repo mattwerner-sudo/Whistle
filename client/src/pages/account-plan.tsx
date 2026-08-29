@@ -20,6 +20,7 @@ import {
   Activity,
   Shield,
   TrendingUp,
+  Linkedin,
   ExternalLink
 } from 'lucide-react';
 import type { SchoolDirectory, StaffMember } from '@shared/schema';
@@ -184,6 +185,56 @@ function PersonaSection({ group }: { group: PersonaGroup }) {
         ))}
       </div>
     </div>
+  );
+}
+
+interface NetworkConnectionRow {
+  id: number;
+  fullName: string | null;
+  headline: string | null;
+  profileUrl: string | null;
+  staffName: string | null;
+  staffTitle: string | null;
+}
+
+function NetworkAtSchoolCard({ schoolId, schoolName }: { schoolId: string; schoolName: string }) {
+  const { data, isLoading } = useQuery<{ schoolId: string; count: number; connections: NetworkConnectionRow[] }>({
+    queryKey: [`/api/linkedin/school/${schoolId}`],
+  });
+
+  if (isLoading || !data || data.count === 0) return null;
+
+  return (
+    <Card data-testid="card-network-at-school">
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Linkedin className="w-4 h-4 text-purple-600" />
+          You know {data.count} {data.count === 1 ? 'person' : 'people'} at {schoolName}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {data.connections.slice(0, 5).map(c => (
+          <div key={c.id} className="flex items-start justify-between gap-2 text-sm" data-testid={`row-network-${c.id}`}>
+            <div className="min-w-0 flex-1">
+              <div className="font-medium truncate">{c.fullName || '(unknown)'}</div>
+              {c.staffTitle && (
+                <div className="text-xs text-muted-foreground truncate">{c.staffTitle}</div>
+              )}
+            </div>
+            {c.profileUrl && (
+              <Button size="icon" variant="ghost" asChild>
+                <a href={c.profileUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </Button>
+            )}
+          </div>
+        ))}
+        {data.count > 5 && (
+          <div className="text-xs text-muted-foreground pt-1">+ {data.count - 5} more</div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -357,6 +408,7 @@ export default function AccountPlan() {
         <div className="space-y-6">
           <TechStackCard techStack={school.techStack} categories={techCategories} />
 
+          <NetworkAtSchoolCard schoolId={school.schoolId} schoolName={school.schoolName} />
 
           <Card>
             <CardHeader>

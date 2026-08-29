@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import crypto from "crypto";
 import { createServer, type Server } from "http";
+import dns from "dns";
 import { chromium } from "playwright";
 import * as cheerio from "cheerio";
 import swaggerUi from "swagger-ui-express";
@@ -11,21 +12,34 @@ import { sendSlackAlert } from "./lib/notifications";
 import { validateApiKey, generateApiKey, type AuthenticatedRequest } from "./middleware/api-auth";
 import { requireAdmin } from "./middleware/auth";
 import { dispatchStaffNewHire, dispatchExtractionCompleted, generateWebhookSecret } from "./lib/webhooks";
-import { apiKeys, webhookSubscriptions, webhookDeliveryLogs, usageEvents, staffMembers, type SchoolDirectory, type StaffMember } from "@shared/schema";
+import { apiKeys, webhookSubscriptions, webhookDeliveryLogs, usageEvents, staffMembers, signals, schoolDirectories, type SchoolDirectory, type StaffMember } from "@shared/schema";
 import authRoutes from "./routes/auth";
+import linkedinRoutes from "./routes/linkedin";
 import billingRoutes from "./routes/billing";
+import orgRoutes from "./routes/org";
+import alertRoutes from "./routes/alerts";
 import { maskStaffList, applyMaskToStaff, getRevealedStaffIds } from "./lib/contact-masking";
 import { revealContact } from "./lib/reveal-service";
-import { requireUser, attachUser, requireActiveSubscription, type UserRequest } from "./middleware/require-user";
+import { requireUser, attachUser, requirePlan, type UserRequest } from "./middleware/require-user";
 import { db } from "./db";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and, desc } from "drizzle-orm";
 import {
   fetchUrlRequestSchema,
   parseHtmlRequestSchema,
+  aiAnalysisRequestSchema,
+  aiCleanDataRequestSchema,
+  aiEmailRequestSchema,
+  aiMeetingPrepRequestSchema,
   createJobSchema,
   type NCAASchool,
   type ExtractionJob,
 } from "@shared/schema";
+import {
+  analyzeTeamStructure,
+  cleanContactData,
+  generateEmailDraft,
+  generateMeetingPrep,
+} from "./gemini";
 import { storage } from "./storage";
 import { ncaaConferences } from "@shared/ncaa-conferences";
 import { 
@@ -272,6 +286,55 @@ function setCachedHtml(url: string, html: string): void {
   console.log(`Cached page for ${url} (size: ${html.length} bytes)`);
 }
 
+const PRIVATE_IP_PATTERNS = [
+  /^127\./,
+  /^10\./,
+  /^172\.(1[6-9]|2\d|3[01])\./,
+  /^192\.168\./,
+  /^169\.254\./,
+  /^::1$/,
+  /^fc00:/i,
+  /^fe80:/i,
+];
+
+async function validateNoSSRF(url: string): Promise<void> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("Invalid URL");
+  }
+
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    throw new Error("Only http and https URLs are allowed");
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (hostname === "localhost" || hostname === "0.0.0.0") {
+    throw new Error("URL targets a disallowed host");
+  }
+
+  // Check literal IP in URL
+  for (const pattern of PRIVATE_IP_PATTERNS) {
+    if (pattern.test(hostname)) {
+      throw new Error("URL targets a private or reserved address");
+    }
+  }
+
+  // DNS resolve and re-check the resolved IP (prevents DNS rebinding)
+  try {
+    const { address } = await dns.promises.lookup(hostname);
+    for (const pattern of PRIVATE_IP_PATTERNS) {
+      if (pattern.test(address)) {
+        throw new Error("URL resolves to a private or reserved address");
+      }
+    }
+  } catch (err: any) {
+    if (err.message.startsWith("URL")) throw err;
+    throw new Error("Could not resolve hostname");
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================================================
   // API DOCUMENTATION (Swagger UI)
@@ -290,45 +353,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication routes
   app.use("/api/auth", authRoutes);
   app.use("/api/billing", billingRoutes);
+  app.use("/api/org", orgRoutes);
+  app.use("/api/alerts", alertRoutes);
 
+  // Whistle Connect (LinkedIn network) routes.
   // Apply rate limiting to all v1 API endpoints (must be registered BEFORE
-  // any /api/v1/* routes).
+  // the /api/v1/* routers so extension ingestion is covered by the v1 limiter).
   app.use("/api/v1", apiLimiter);
 
-  // SSRF guard for the URL-fetch proxies: only allow plain http(s) URLs to
-  // public hosts — no localhost, private ranges, or link-local metadata IPs.
-  function validateProxyTarget(rawUrl: string): { ok: true } | { ok: false; error: string } {
-    let parsed: URL;
-    try {
-      parsed = new URL(rawUrl);
-    } catch {
-      return { ok: false, error: "Invalid URL" };
-    }
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return { ok: false, error: "Only http(s) URLs are allowed" };
-    }
-    const host = parsed.hostname.toLowerCase();
-    const privateHostPatterns = [
-      /^localhost$/, /\.localhost$/, /\.local$/, /\.internal$/,
-      /^127\./, /^0\./, /^10\./, /^192\.168\./, /^169\.254\./,
-      /^172\.(1[6-9]|2\d|3[01])\./,
-      /^\[?::1\]?$/, /^\[?fc/, /^\[?fd/, /^\[?fe80/,
-    ];
-    if (privateHostPatterns.some((p) => p.test(host))) {
-      return { ok: false, error: "Target host is not allowed" };
-    }
-    return { ok: true };
-  }
+  // Mount at both /api/linkedin (browser) and /api/v1/linkedin (extension ingestion)
+  app.use("/api/linkedin", linkedinRoutes);
+  app.use("/api/v1/linkedin", linkedinRoutes);
 
-  // Fetch URL endpoint - proxy to bypass CORS. Admin-only: this proxies
-  // arbitrary URLs, so it must never be exposed to the public.
+  // Fetch URL endpoint - proxy to bypass CORS
   app.post("/api/fetch-url", requireAdmin, async (req, res) => {
     try {
       const { url } = fetchUrlRequestSchema.parse(req.body);
-      const target = validateProxyTarget(url);
-      if (!target.ok) {
-        return res.status(400).json({ error: target.error });
-      }
+
+      await validateNoSSRF(url);
 
       // Try multiple CORS proxy strategies
       const strategies = [
@@ -380,15 +422,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Fetch URL with JavaScript rendering (Playwright). Admin-only: renders
-  // arbitrary URLs with a headless browser — expensive and SSRF-prone.
+  // Fetch URL with JavaScript rendering (Playwright)
   app.post("/api/fetch-url-rendered", requireAdmin, async (req, res) => {
     try {
       const { url } = fetchUrlRequestSchema.parse(req.body);
-      const target = validateProxyTarget(url);
-      if (!target.ok) {
-        return res.status(400).json({ error: target.error });
-      }
+
+      await validateNoSSRF(url);
 
       // Check cache first
       const cachedHtml = getCachedHtml(url);
@@ -463,6 +502,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Fetch rendered URL error:", error);
       res.status(400).json({
         error: error.message || "Failed to fetch rendered URL"
+      });
+    }
+  });
+
+  // AI Analysis endpoint
+  app.post("/api/ai/analyze", async (req, res) => {
+    try {
+      const { contacts } = aiAnalysisRequestSchema.parse(req.body);
+
+      if (contacts.length === 0) {
+        return res.status(400).json({ error: "No contacts to analyze" });
+      }
+
+      const content = await analyzeTeamStructure(contacts);
+
+      res.json({
+        content,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("AI Analysis error:", error);
+      res.status(500).json({
+        error: error.message || "Failed to generate analysis"
+      });
+    }
+  });
+
+  // AI Clean Data endpoint
+  app.post("/api/ai/clean-data", async (req, res) => {
+    try {
+      const { contacts } = aiCleanDataRequestSchema.parse(req.body);
+
+      if (contacts.length === 0) {
+        return res.status(400).json({ error: "No contacts to clean" });
+      }
+
+      const cleanedContacts = await cleanContactData(contacts);
+
+      res.json({ contacts: cleanedContacts });
+    } catch (error: any) {
+      console.error("AI Clean Data error:", error);
+      res.status(500).json({
+        error: error.message || "Failed to clean data"
+      });
+    }
+  });
+
+  // AI Email Generation endpoint
+  app.post("/api/ai/generate-email", async (req, res) => {
+    try {
+      const { recipient, context } = aiEmailRequestSchema.parse(req.body);
+
+      const draft = await generateEmailDraft(recipient, context);
+
+      res.json({
+        subject: draft.subject,
+        body: draft.body,
+        recipientName: recipient.name,
+        recipientEmail: recipient.email,
+        context,
+      });
+    } catch (error: any) {
+      console.error("AI Email Generation error:", error);
+      res.status(500).json({
+        error: error.message || "Failed to generate email"
+      });
+    }
+  });
+
+  // AI Meeting Prep endpoint
+  app.post("/api/ai/meeting-prep", async (req, res) => {
+    try {
+      const { recipient, topic } = aiMeetingPrepRequestSchema.parse(req.body);
+
+      const content = await generateMeetingPrep(recipient, topic);
+
+      res.json({
+        content,
+        recipientName: recipient.name,
+        topic,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("AI Meeting Prep error:", error);
+      res.status(500).json({
+        error: error.message || "Failed to generate meeting prep"
       });
     }
   });
@@ -708,7 +833,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       if (outcome.status === "error") {
         const httpStatus =
-          outcome.code === "subscription_required" ? 402 :
+          outcome.code === "out_of_quota" ? 402 :
+          outcome.code === "payment_failed" ? 402 :
           outcome.code === "staff_not_found" ? 404 : 400;
         return res.status(httpStatus).json(outcome);
       }
@@ -716,6 +842,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Reveal contact error:", error);
       res.status(500).json({ error: error.message || "Failed to reveal contact" });
+    }
+  });
+  
+  // Get overall stats
+  app.get("/api/staff/stats", requireUser, async (_req, res) => {
+    try {
+      const stats = await storage.getStats();
+      res.json(stats);
+    } catch (error: any) {
+      console.error("Get stats error:", error);
+      res.status(500).json({ error: error.message || "Failed to get stats" });
     }
   });
 
@@ -741,18 +878,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: error.message || "Failed to report contact" });
     }
   });
-  
-  // Get overall stats
-  app.get("/api/staff/stats", requireUser, async (_req, res) => {
-    try {
-      const stats = await storage.getStats();
-      res.json(stats);
-    } catch (error: any) {
-      console.error("Get stats error:", error);
-      res.status(500).json({ error: error.message || "Failed to get stats" });
-    }
-  });
-  
+
   // Extract staff from a specific school (async job-based for multi-user support)
   app.post("/api/staff/extract/:schoolId", async (req, res) => {
     try {
@@ -907,7 +1033,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Clear old staff and insert new
         await storage.deleteStaffMembersBySchool(schoolId);
-        const staffMembers = await convertToStaffMembers(result.contacts, schoolId);
+        const staffMembers = convertToStaffMembers(result.contacts, schoolId);
         await storage.bulkUpsertStaffMembers(staffMembers);
         
         // Update directory status
@@ -1030,7 +1156,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           
           await storage.deleteStaffMembersBySchool(schoolId);
-          const staffMembers = await convertToStaffMembers(result.contacts, schoolId);
+          const staffMembers = convertToStaffMembers(result.contacts, schoolId);
           await storage.bulkUpsertStaffMembers(staffMembers);
           
           await storage.upsertSchoolDirectory({
@@ -1119,6 +1245,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================================================
   // USAGE REPORTING ENDPOINTS (Admin/Analytics)
   // ============================================================================
+  
+  // Get usage statistics dashboard
+  app.get("/api/reports/stats", async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      
+      const stats = await storage.getUsageStats({
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined,
+      });
+      
+      res.json(stats);
+    } catch (error: any) {
+      console.error("Get usage stats error:", error);
+      res.status(500).json({ error: error.message || "Failed to get usage stats" });
+    }
+  });
+  
+  // Get usage events with filtering
+  app.get("/api/reports/events", async (req, res) => {
+    try {
+      const { eventType, schoolId, startDate, endDate, limit, offset } = req.query;
+      
+      const result = await storage.getUsageEvents({
+        eventType: eventType as string | undefined,
+        schoolId: schoolId as string | undefined,
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined,
+        limit: limit ? parseInt(limit as string) : 100,
+        offset: offset ? parseInt(offset as string) : 0,
+      });
+      
+      res.json(result);
+    } catch (error: any) {
+      console.error("Get usage events error:", error);
+      res.status(500).json({ error: error.message || "Failed to get usage events" });
+    }
+  });
   
   app.get("/api/credits", requireAdmin, async (_req, res) => {
     try {
@@ -1592,6 +1756,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/admin/staff/reverify", requireAdmin, async (req, res) => {
+    try {
+      const requested = Number(req.body?.limit);
+      const limit = Number.isFinite(requested) ? Math.min(Math.max(1, Math.floor(requested)), 500) : 100;
+      const force = req.body?.force === true;
+      const result = await storage.reverifyStaffEmails(limit, { force });
+      res.json({ success: true, ...result });
+    } catch (error: any) {
+      console.error("Reverify staff emails error:", error);
+      res.status(500).json({ error: error.message || "Failed to reverify staff emails" });
+    }
+  });
+
   app.get("/api/admin/data-quality", requireAdmin, async (req, res) => {
     try {
       const { isValidContactEmail, isValidPersonName } = await import("./staffExtractor");
@@ -1660,21 +1837,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Data quality score error:", error);
       res.status(500).json({ error: error.message || "Failed to compute data quality scores" });
-    }
-  });
-
-  // Evergreen maintenance: re-run free email verification on unverified / flagged
-  // records. Bounded by `limit` (default 100, capped at 500) so it can't run away.
-  app.post("/api/admin/staff/reverify", requireAdmin, async (req, res) => {
-    try {
-      const requested = Number(req.body?.limit);
-      const limit = Number.isFinite(requested) ? Math.min(Math.max(1, Math.floor(requested)), 500) : 100;
-      const force = req.body?.force === true;
-      const result = await storage.reverifyStaffEmails(limit, { force });
-      res.json({ success: true, ...result });
-    } catch (error: any) {
-      console.error("Reverify staff emails error:", error);
-      res.status(500).json({ error: error.message || "Failed to reverify staff emails" });
     }
   });
 
@@ -1763,7 +1925,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           } else {
             // Save extracted staff
             await storage.deleteStaffMembersBySchool(schoolId);
-            const staffMembers = await convertToStaffMembers(result.contacts, schoolId);
+            const staffMembers = convertToStaffMembers(result.contacts, schoolId);
             await storage.bulkUpsertStaffMembers(staffMembers);
             
             await storage.upsertSchoolDirectory({
@@ -1844,7 +2006,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all lists
   app.get("/api/lists", requireUser, async (req: UserRequest, res) => {
     try {
-      const lists = await storage.getSavedLists(req.user!.id);
+      const lists = await storage.getSavedLists();
       res.json(lists);
     } catch (error: any) {
       console.error("Get lists error:", error);
@@ -1853,14 +2015,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Create new list
-  app.post("/api/lists", attachUser, requireActiveSubscription(), async (req: UserRequest, res) => {
+  app.post("/api/lists", attachUser, requirePlan("team"), async (req: UserRequest, res) => {
     try {
       const parsed = createListSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors[0]?.message || "Invalid request" });
       }
       const { name, description } = parsed.data;
-      const list = await storage.createSavedList({ name, description, userId: req.user!.id });
+      const list = await storage.createSavedList({ name, description, userId: 1 });
       res.json(list);
     } catch (error: any) {
       console.error("Create list error:", error);
@@ -1875,7 +2037,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isNaN(listId) || listId <= 0) {
         return res.status(400).json({ error: "Invalid list ID" });
       }
-      const list = await storage.getSavedListWithItems(listId, req.user!.id);
+      const list = await storage.getSavedListWithItems(listId);
       if (!list) {
         return res.status(404).json({ error: "List not found" });
       }
@@ -1887,7 +2049,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Add contact to list
-  app.post("/api/lists/:id/add", attachUser, requireActiveSubscription(), async (req: UserRequest, res) => {
+  app.post("/api/lists/:id/add", attachUser, requirePlan("team"), async (req: UserRequest, res) => {
     try {
       const listId = parseInt(req.params.id);
       if (isNaN(listId) || listId <= 0) {
@@ -1900,8 +2062,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const { staffId, notes } = parsed.data;
       
-      // Check if list exists and belongs to this user
-      const list = await storage.getSavedListWithItems(listId, req.user!.id);
+      // Check if list exists
+      const list = await storage.getSavedListWithItems(listId);
       if (!list) {
         return res.status(404).json({ error: "List not found" });
       }
@@ -1928,10 +2090,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isNaN(listId) || listId <= 0 || isNaN(staffId) || staffId <= 0) {
         return res.status(400).json({ error: "Invalid list ID or staff ID" });
       }
-      const owned = await storage.getSavedListWithItems(listId, req.user!.id);
-      if (!owned) {
-        return res.status(404).json({ error: "List not found" });
-      }
       await storage.removeFromSavedList(listId, staffId);
       res.json({ success: true });
     } catch (error: any) {
@@ -1946,10 +2104,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const listId = parseInt(req.params.id);
       if (isNaN(listId) || listId <= 0) {
         return res.status(400).json({ error: "Invalid list ID" });
-      }
-      const owned = await storage.getSavedListWithItems(listId, req.user!.id);
-      if (!owned) {
-        return res.status(404).json({ error: "List not found" });
       }
       await storage.deleteSavedList(listId);
       res.json({ success: true });
@@ -2240,6 +2394,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Match accounts error:", error);
       res.status(500).json({ error: error.message || "Failed to match accounts" });
+    }
+  });
+
+  // GET /api/growth/new-hires - Recent staff additions (last 7 days)
+  app.get("/api/growth/new-hires", attachUser, async (req: UserRequest, res) => {
+    try {
+      const { db } = await import("./db");
+      const { staffMembers, schoolDirectories } = await import("@shared/schema");
+      const { desc, gt, eq } = await import("drizzle-orm");
+
+      // Get staff extracted in the last 7 days
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const hires = await db
+        .select({
+          id: staffMembers.id,
+          name: staffMembers.name,
+          title: staffMembers.title,
+          email: staffMembers.email,
+          phone: staffMembers.phone,
+          school: schoolDirectories.schoolName,
+          schoolId: schoolDirectories.schoolId,
+          conference: schoolDirectories.conference,
+          detectedAt: staffMembers.extractedAt
+        })
+        .from(staffMembers)
+        .innerJoin(schoolDirectories, eq(staffMembers.schoolId, schoolDirectories.schoolId))
+        .where(gt(staffMembers.extractedAt, sevenDaysAgo))
+        .orderBy(desc(staffMembers.extractedAt))
+        .limit(100);
+
+      const maskedHires = await maskStaffList(req.user?.id, hires as any);
+      res.json(maskedHires);
+    } catch (error: any) {
+      console.error("New hires error:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch new hires" });
     }
   });
 
@@ -2639,6 +2830,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/v1/schools/:id/staff - Staff list for a specific school (unmasked)
+  app.get("/api/v1/schools/:id/staff", validateApiKey, async (req: AuthenticatedRequest, res) => {
+    try {
+      const schoolId = req.params.id;
+      const { limit = "200", offset = "0" } = req.query;
+      const limitNum = Math.min(500, parseInt(limit as string) || 200);
+      const offsetNum = parseInt(offset as string) || 0;
+
+      const { members, total } = await storage.getStaffMembers({ schoolId, limit: limitNum, offset: offsetNum });
+
+      res.json({
+        school_id: schoolId,
+        total,
+        limit: limitNum,
+        offset: offsetNum,
+        staff: members.map((s: StaffMember) => ({
+          id: s.id,
+          name: s.name,
+          title: s.title,
+          email: s.email,
+          phone: s.phone,
+          department: s.department,
+          office: s.office,
+          linkedin_url: s.linkedinUrl,
+          twitter_handle: s.twitterHandle,
+          last_scraped_at: (s as any).lastScrapedAt,
+          extracted_at: s.extractedAt,
+        })),
+      });
+    } catch (error: any) {
+      console.error("v1/schools/:id/staff error:", error);
+      res.status(500).json({ error: error.message || "Internal server error" });
+    }
+  });
+
+  // POST /api/v1/schools/:id/refresh - Queue a scrape job for a school
+  app.post("/api/v1/schools/:id/refresh", validateApiKey, async (req: AuthenticatedRequest, res) => {
+    try {
+      const schoolId = req.params.id;
+      const schools = await db.select().from(schoolDirectories).where(eq(schoolDirectories.schoolId, schoolId)).limit(1);
+      if (!schools.length) {
+        return res.status(404).json({ error: "School not found", school_id: schoolId });
+      }
+      const school = schools[0];
+      const job = await storage.createExtractionJob({
+        type: "single",
+        targetId: schoolId,
+        status: "pending",
+        totalSchools: 1,
+        processedSchools: 0,
+        contactsFound: 0,
+        logs: [`API refresh queued for ${school.schoolName}`],
+      });
+      queueJob(job.id);
+      res.json({
+        message: "Refresh queued",
+        school_id: schoolId,
+        school_name: school.schoolName,
+        job_id: job.id,
+        queued_at: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("v1/schools/:id/refresh error:", error);
+      res.status(500).json({ error: error.message || "Internal server error" });
+    }
+  });
+
+  // GET /api/v1/signals - Intent signals feed
+  app.get("/api/v1/signals", validateApiKey, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { school_id, type, since, limit = "50", offset = "0" } = req.query;
+      const limitNum = Math.min(500, parseInt(limit as string) || 50);
+      const offsetNum = parseInt(offset as string) || 0;
+
+      const conditions: any[] = [
+        sql`${signals.type} <> 'network_connection'`,
+      ];
+      if (school_id) conditions.push(eq(signals.schoolId, school_id as string));
+      if (type) conditions.push(eq(signals.type, type as string));
+      if (since) conditions.push(sql`${signals.detectedAt} >= ${new Date(since as string)}`);
+
+      const rows = await db
+        .select()
+        .from(signals)
+        .where(and(...conditions))
+        .orderBy(desc(signals.detectedAt))
+        .limit(limitNum)
+        .offset(offsetNum);
+
+      res.json({
+        total: rows.length,
+        limit: limitNum,
+        offset: offsetNum,
+        signals: rows.map((s) => ({
+          id: s.id,
+          type: s.type,
+          school_id: s.schoolId,
+          staff_id: s.staffId,
+          description: s.description,
+          metadata: s.metadata,
+          detected_at: s.detectedAt,
+          is_actioned: s.isActioned,
+        })),
+      });
+    } catch (error: any) {
+      console.error("v1/signals error:", error);
+      res.status(500).json({ error: error.message || "Internal server error" });
+    }
+  });
+
   // ============================================================================
   // API KEY MANAGEMENT (Protected - requires admin scope or ADMIN_SECRET for bootstrap)
   // ============================================================================
@@ -2689,6 +2990,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Apply strict rate limiting to admin endpoints
   app.use("/api/keys", strictLimiter);
   app.use("/api/webhooks", strictLimiter);
+
+  // POST /api/admin/nil-seed — one-shot NIL collective seeding
+  app.post("/api/admin/nil-seed", requireAdminAccess, async (_req, res) => {
+    try {
+      const { scrapeNilCollectives } = await import("./lib/nil-scraper");
+      const count = await scrapeNilCollectives();
+      res.json({ message: `NIL seeding complete`, newCollectives: count });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/admin/news-monitor/:schoolId — manual news monitor for one school
+  app.post("/api/admin/news-monitor/:schoolId", requireAdminAccess, async (req, res) => {
+    try {
+      const { monitorNewsForSchool } = await import("./lib/news-monitor");
+      const school = await db.select({ schoolName: schoolDirectories.schoolName })
+        .from(schoolDirectories).where(eq(schoolDirectories.schoolId, req.params.schoolId)).limit(1);
+      if (!school.length) return res.status(404).json({ error: "School not found" });
+      const count = await monitorNewsForSchool(req.params.schoolId, school[0].schoolName);
+      res.json({ message: `News monitor complete`, signalsCreated: count });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/admin/job-boards — manual job board scrape trigger
+  app.post("/api/admin/job-boards", requireAdminAccess, async (_req, res) => {
+    try {
+      const { scrapeJobBoards } = await import("./lib/job-board-scraper");
+      const count = await scrapeJobBoards();
+      res.json({ message: `Job board scrape complete`, newPostings: count });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   // POST /api/keys - Generate a new API key
   app.post("/api/keys", requireAdminAccess, async (req: AuthenticatedRequest, res) => {
@@ -2971,7 +3308,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/signals/:id/action", attachUser, requireActiveSubscription(), async (req: UserRequest, res) => {
+  app.post("/api/signals/:id/action", attachUser, requirePlan("team"), async (req: UserRequest, res) => {
     try {
       const callerUserId = req.session?.userId;
       if (!callerUserId) {
@@ -2993,7 +3330,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/signals/warm-paths", attachUser, requireActiveSubscription(), async (req: UserRequest, res) => {
+  app.post("/api/signals/warm-paths", attachUser, requirePlan("team"), async (req: UserRequest, res) => {
     try {
       const { targetSchoolId, customerSchoolIds } = req.body;
       
@@ -3008,6 +3345,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Find warm paths error:", error);
       res.status(500).json({ error: error.message || "Failed to find warm paths" });
+    }
+  });
+
+  app.post("/api/ai/signal-email", async (req, res) => {
+    try {
+      const { signal, recipientName, recipientEmail } = req.body;
+      
+      if (!signal || !recipientName) {
+        return res.status(400).json({ error: "signal and recipientName required" });
+      }
+      
+      // Build context from signal
+      let context = "";
+      const meta = signal.metadata || {};
+      
+      switch (signal.type) {
+        case 'new_hire':
+          context = `You saw that ${recipientName} recently joined ${meta.newSchoolName || 'their new organization'}${meta.oldSchoolName ? ` from ${meta.oldSchoolName}` : ''}. Congratulate them on the new role.`;
+          break;
+        case 'warm_path':
+          context = `${recipientName} previously worked at ${meta.oldSchoolName} where they may have used your product. They are now at ${meta.newSchoolName}. Reference their background to build rapport.`;
+          break;
+        case 'tech_drop':
+          context = `${meta.newSchoolName} recently changed their technology stack${meta.techDropped?.length ? `, dropping ${meta.techDropped.join(', ')}` : ''}. They may be evaluating alternatives.`;
+          break;
+        case 'tech_add':
+          context = `${meta.newSchoolName} recently adopted new technology${meta.techAdded?.length ? `: ${meta.techAdded.join(', ')}` : ''}. They are modernizing their operations.`;
+          break;
+        case 'departure':
+          context = `There have been recent staff changes at ${meta.oldSchoolName}. New decision makers may be looking to make changes.`;
+          break;
+        default:
+          context = signal.description || "Reach out based on recent activity.";
+      }
+      
+      const recipient = {
+        name: recipientName,
+        title: meta.staffTitle || "Athletic Staff",
+        email: recipientEmail || "contact@example.com",
+      };
+      
+      const result = await generateEmailDraft(recipient, context);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Generate signal email error:", error);
+      res.status(500).json({ error: error.message || "Failed to generate email" });
     }
   });
 

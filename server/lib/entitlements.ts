@@ -14,9 +14,8 @@ export async function syncEntitlementFromUser(userId: number): Promise<void> {
 
   const row = {
     userId,
-    tier: u.subscriptionTier ?? "standard",
+    tier: u.subscriptionTier ?? "payg",
     status: u.subscriptionStatus ?? "inactive",
-    seats: u.seats ?? 1,
     stripeCustomerId: u.stripeCustomerId ?? null,
     stripeSubscriptionId: u.stripeSubscriptionId ?? null,
     monthlyAllocation: u.monthlyCreditsAllocation ?? 0,
@@ -36,7 +35,6 @@ export async function syncEntitlementFromUser(userId: number): Promise<void> {
       set: {
         tier: row.tier,
         status: row.status,
-        seats: row.seats,
         stripeCustomerId: row.stripeCustomerId,
         stripeSubscriptionId: row.stripeSubscriptionId,
         monthlyAllocation: row.monthlyAllocation,

@@ -1,0 +1,197 @@
+name: Email Coverage Regression Check
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'server/lib/scraper-worker.ts'
+      - 'server/lib/scraper-config.ts'
+      - 'server/lib/parser-factory.ts'
+      - 'server/lib/browser-pool.ts'
+      - 'server/lib/bio-cache.ts'
+      - 'server/lib/spa-host-cache.ts'
+      - 'server/lib/ai-extractor.ts'
+      - 'server/lib/known-directory-urls.ts'
+      - 'shared/ncaa-conferences.ts'
+      - 'tests/multi-conf-audit.ts'
+      - 'tests/audit-diff.ts'
+      - 'tests/audit-check.ts'
+      - '.github/workflows/email-coverage-audit.yml'
+      - '.github/workflows/email-coverage-baseline.yml'
+  pull_request:
+    paths:
+      - 'server/lib/scraper-worker.ts'
+      - 'server/lib/scraper-config.ts'
+      - 'server/lib/parser-factory.ts'
+      - 'server/lib/browser-pool.ts'
+      - 'server/lib/bio-cache.ts'
+      - 'server/lib/spa-host-cache.ts'
+      - 'server/lib/ai-extractor.ts'
+      - 'server/lib/known-directory-urls.ts'
+      - 'shared/ncaa-conferences.ts'
+      - 'tests/multi-conf-audit.ts'
+      - 'tests/audit-diff.ts'
+      - 'tests/audit-check.ts'
+      - '.github/workflows/email-coverage-audit.yml'
+      - '.github/workflows/email-coverage-baseline.yml'
+  workflow_dispatch:
+    inputs:
+      per_conf:
+        description: 'Schools sampled per conference (multi-conf-audit --per-conf)'
+        required: false
+        default: '4'
+      conferences:
+        description: 'Comma-separated conference shortNames to audit (blank = all)'
+        required: false
+        default: ''
+      total_threshold:
+        description: 'Minimum acceptable overall ΔEmails (audit-check --total-threshold)'
+        required: false
+        default: '-25'
+      conference_threshold:
+        description: 'Minimum acceptable per-conference ΔEmails'
+        required: false
+        default: '-15'
+      school_threshold:
+        description: 'Minimum acceptable per-school ΔEmails'
+        required: false
+        default: '-5'
+      baseline_max_age_days:
+        description: 'Warn when baseline.provenance.capturedAt is older than this many days (audit-check --baseline-max-age-days)'
+        required: false
+        default: '30'
+      baseline_fail_age_days:
+        description: 'Fail (exit 3) when baseline is older than this many days; 0 disables the hard fail (audit-check --baseline-fail-age-days)'
+        required: false
+        default: '90'
+      regenerate_baseline:
+        description: 'Skip the canonical baseline artifact and regenerate locally (slow; use when the baseline schema changed)'
+        required: false
+        default: 'false'
+
+concurrency:
+  group: email-coverage-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Baseline vs after audit + regression check
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # Audit sample sizing. Push/PR runs use the defaults below; workflow_dispatch
+      # can override via the `inputs` above.
+      AUDIT_PER_CONF: ${{ github.event.inputs.per_conf || '4' }}
+      AUDIT_CONFERENCES: ${{ github.event.inputs.conferences || '' }}
+      AUDIT_CONCURRENCY: '4'
+      AUDIT_SITE_TIMEOUT_MS: '120000'
+      # Regression thresholds (also honored by audit-check.ts via env vars).
+      AUDIT_CHECK_TOTAL_THRESHOLD: ${{ github.event.inputs.total_threshold || '-25' }}
+      AUDIT_CHECK_CONFERENCE_THRESHOLD: ${{ github.event.inputs.conference_threshold || '-15' }}
+      AUDIT_CHECK_SCHOOL_THRESHOLD: ${{ github.event.inputs.school_threshold || '-5' }}
+      # Baseline staleness gate. Warn at 30 days, hard-fail (exit 3) at 90
+      # days so a paused baseline-refresh cron does not let the regression
+      # check coast on an ever-older baseline.
+      AUDIT_CHECK_BASELINE_MAX_AGE_DAYS: ${{ github.event.inputs.baseline_max_age_days || '30' }}
+      AUDIT_CHECK_BASELINE_FAIL_AGE_DAYS: ${{ github.event.inputs.baseline_fail_age_days || '90' }}
+      # When 'true', skip the canonical baseline download and regenerate
+      # the baseline locally inside this job. Defaults to 'false' so PR runs
+      # diff against the canonical, scheduled-refresh baseline artifact.
+      REGENERATE_BASELINE: ${{ github.event.inputs.regenerate_baseline || 'false' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Build audit CLI args
+        id: args
+        run: |
+          ARGS="--per-conf=${AUDIT_PER_CONF} --concurrency=${AUDIT_CONCURRENCY} --site-timeout=${AUDIT_SITE_TIMEOUT_MS}"
+          if [ -n "${AUDIT_CONFERENCES}" ]; then
+            ARGS="${ARGS} --conferences=${AUDIT_CONFERENCES}"
+          fi
+          echo "audit_args=${ARGS}" >> "$GITHUB_OUTPUT"
+          echo "Audit args: ${ARGS}"
+
+      - name: Download canonical baseline artifact
+        id: download_baseline
+        if: env.REGENERATE_BASELINE != 'true'
+        continue-on-error: true
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          # Pulls the latest successful run of the baseline-refresh workflow.
+          workflow: email-coverage-baseline.yml
+          name: audit-baseline-canonical-latest
+          path: .
+          if_no_artifact_found: warn
+          # Look across the whole repo's history; the scheduled workflow
+          # runs on the default branch.
+          workflow_conclusion: success
+
+      - name: Verify downloaded baseline
+        id: have_baseline
+        if: env.REGENERATE_BASELINE != 'true'
+        run: |
+          if [ -f audit-baseline.json ]; then
+            echo "Found canonical baseline:"
+            node -e "const d=require('./audit-baseline.json'); console.log(JSON.stringify(d.provenance||{note:'no provenance stamp'}, null, 2)); console.log('rows:', (d.rows||[]).length);"
+            echo "have_baseline=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No canonical baseline artifact found; will regenerate locally."
+            echo "have_baseline=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Baseline audit (bio enrichment disabled, fallback / forced regenerate)
+        if: env.REGENERATE_BASELINE == 'true' || steps.have_baseline.outputs.have_baseline != 'true'
+        env:
+          SCRAPER_BIO_ENRICH_MAX_PAGES: '0'
+        run: |
+          echo "Regenerating baseline locally (REGENERATE_BASELINE=${REGENERATE_BASELINE})."
+          npx tsx tests/multi-conf-audit.ts \
+            ${{ steps.args.outputs.audit_args }} \
+            --out=audit-baseline.json
+
+      - name: After audit (bio enrichment enabled)
+        run: |
+          npx tsx tests/multi-conf-audit.ts \
+            ${{ steps.args.outputs.audit_args }} \
+            --out=audit-after.json
+
+      - name: Diff baseline vs after
+        run: |
+          npx tsx tests/audit-diff.ts \
+            --baseline=audit-baseline.json \
+            --after=audit-after.json \
+            --out=audit-diff.json
+
+      - name: Run regression check
+        id: check
+        run: |
+          npx tsx tests/audit-check.ts --diff=audit-diff.json
+        # Thresholds are read from AUDIT_CHECK_* env vars set on the job.
+        # Exit code 1 = regression detected (job fails and the offending
+        # conferences/schools are printed in the log above).
+
+      - name: Upload audit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: email-coverage-audit-${{ github.run_id }}
+          path: |
+            audit-baseline.json
+            audit-after.json
+            audit-diff.json
+          if-no-files-found: warn
+          retention-days: 14

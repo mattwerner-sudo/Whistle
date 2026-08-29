@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { db } from "../db";
-import { users, authTokens, registerSchema, loginSchema } from "@shared/schema";
+import { users, authTokens, registerSchema, loginSchema, organizations, organizationMembers } from "@shared/schema";
 import { hashPassword, verifyPassword } from "../lib/auth-utils";
 import { syncEntitlementFromUser } from "../lib/entitlements";
 import { sendMail } from "../lib/mailer";
@@ -72,6 +72,17 @@ router.post("/register", async (req: Request, res: Response) => {
       isVerified: false,
       tosAcceptedAt: new Date(),
     }).returning();
+
+    // Create a default org (Pro/1 seat) for every new user so the seat model
+    // is always consistent. seatLimit will be updated by the Stripe webhook when
+    // they subscribe to a paid plan.
+    const [org] = await db.insert(organizations).values({
+      name: `${fullName}'s Team`,
+      ownerUserId: newUser.id,
+      seatLimit: 1,
+    }).returning();
+    await db.update(users).set({ organizationId: org.id }).where(eq(users.id, newUser.id));
+    await db.insert(organizationMembers).values({ organizationId: org.id, userId: newUser.id, role: "owner" });
 
     // Seed a default entitlements row so plan/quota state is always queryable.
     await syncEntitlementFromUser(newUser.id);

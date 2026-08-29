@@ -1,0 +1,46 @@
+# Render blueprint for Whistle.
+#
+# Deliberately a single instance: server/lib/cron.ts registers its schedules
+# in-process, so every extra replica would re-run the nightly re-scrape, the
+# 8am digest, and the news monitor — duplicating signals and burning Gemini
+# quota. Scale this service up only after cron moves out of the web process.
+services:
+  - type: web
+    name: whistle
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter # Free instances sleep when idle, which stops cron from firing.
+    numInstances: 1
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5001
+      # Every value below is set in the Render dashboard, never committed.
+      - key: DATABASE_URL
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: ADMIN_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: SENDGRID_API_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: SLACK_WEBHOOK_URL
+        sync: false
+      - key: SALES_INBOX
+        sync: false

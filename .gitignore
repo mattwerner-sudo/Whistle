@@ -5,5 +5,11 @@ server/public
 vite.config.ts.*
 *.tar.gz
 .data/
-project.zip
-attached_assets/stripe-sample-code_1769985748623.zip
+# Local environment secrets
+.env
+.env.local
+package-lock.json.replit-backup
+
+# Replit artifact dump: pasted prompts + third-party sample code.
+# Contained a real Stripe test key; kept out of the repo entirely.
+attached_assets/

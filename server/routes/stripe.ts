@@ -3,11 +3,50 @@ import { z } from "zod";
 import { stripeService } from "../stripeService";
 import { db } from "../db";
 import { usageEvents } from "@shared/schema";
-import { SINGLE_PLAN } from "./billing";
 
-// Single plan: $25/seat/month with a chosen seat quantity.
+const SUBSCRIPTION_PLANS: Record<string, {
+  name: string;
+  annualPrice: number;
+  credits: number;
+  overageRate: number;
+  seats: number;
+  tier: string;
+  lookupKey: string;
+}> = {
+  'plan_pro': {
+    name: 'Pro',
+    annualPrice: 240000,  // $2,400/yr
+    credits: 2400,
+    overageRate: 50,      // $0.50/reveal
+    seats: 1,
+    tier: 'pro',
+    lookupKey: 'whistle_pro_annual',
+  },
+  'plan_team': {
+    name: 'Team',
+    annualPrice: 720000,  // $7,200/yr
+    credits: 9600,
+    overageRate: 35,      // $0.35/reveal
+    seats: 5,
+    tier: 'team',
+    lookupKey: 'whistle_team_annual',
+  },
+  'plan_enterprise': {
+    name: 'Enterprise',
+    annualPrice: 1800000, // $18,000/yr
+    credits: 36000,
+    overageRate: 25,      // $0.25/reveal
+    seats: -1,
+    tier: 'enterprise',
+    lookupKey: 'whistle_enterprise_annual',
+  },
+};
+
+const TRIAL_PERIOD_DAYS = 14;
+
 const checkoutSchema = z.object({
-  seats: z.number().int().min(1).max(SINGLE_PLAN.maxSeats).optional().default(1),
+  type: z.enum(['subscription']),
+  planId: z.string().optional(),
 });
 
 const router = Router();
@@ -18,30 +57,19 @@ router.post("/checkout", async (req: Request, res: Response) => {
       return res.json({ url: null, message: "No active session. Checkout not available in open-access mode." });
     }
 
-    const validation = checkoutSchema.safeParse(req.body ?? {});
+    const validation = checkoutSchema.safeParse(req.body);
     if (!validation.success) {
-      return res.status(400).json({
-        error: "Validation failed",
-        details: validation.error.flatten().fieldErrors,
+      return res.status(400).json({ 
+        error: "Validation failed", 
+        details: validation.error.flatten().fieldErrors 
       });
     }
 
-    const { seats } = validation.data;
+    const { type, planId } = validation.data;
     const user = await stripeService.getUserById(req.session.userId);
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });
-    }
-
-    // Block new checkouts whenever a live (non-canceled) subscription exists —
-    // including past_due, where the fix is updating the card in the portal,
-    // not creating a duplicate subscription.
-    if (user.stripeSubscriptionId && user.subscriptionStatus !== "canceled" && user.subscriptionStatus !== "inactive") {
-      return res.status(400).json({
-        error: user.subscriptionStatus === "past_due"
-          ? "Your subscription has a failed payment. Update your payment method from the billing page instead of starting a new subscription."
-          : "You already have an active subscription. Manage seats from the billing page.",
-      });
     }
 
     let customerId = user.stripeCustomerId;
@@ -53,21 +81,35 @@ router.post("/checkout", async (req: Request, res: Response) => {
 
     const baseUrl = `${req.protocol}://${req.get('host')}`;
 
-    const session = await stripeService.createSubscriptionCheckoutSession(
-      customerId,
-      seats,
-      `${baseUrl}/settings/billing?success=true&session_id={CHECKOUT_SESSION_ID}`,
-      `${baseUrl}/pricing?canceled=true`,
-      user.id
-    );
+    if (type === 'subscription') {
+      if (!planId || !SUBSCRIPTION_PLANS[planId]) {
+        return res.status(400).json({ error: "Invalid subscription plan" });
+      }
 
-    await db.insert(usageEvents).values({
-      eventType: "stripe_checkout_created",
-      sessionId: req.sessionID || null,
-      details: { userId: user.id, type: "subscription", planId: SINGLE_PLAN.id, seats, sessionStripeId: session.id },
-    });
+      const plan = SUBSCRIPTION_PLANS[planId];
 
-    return res.json({ url: session.url });
+      const session = await stripeService.createSubscriptionCheckoutSession(
+        customerId,
+        planId,
+        plan,
+        plan.lookupKey,
+        'year',
+        `${baseUrl}/pricing?success=true&session_id={CHECKOUT_SESSION_ID}`,
+        `${baseUrl}/pricing?canceled=true`,
+        user.id,
+        TRIAL_PERIOD_DAYS,
+      );
+
+      await db.insert(usageEvents).values({
+        eventType: "stripe_checkout_created",
+        sessionId: req.sessionID || null,
+        details: { userId: user.id, type: "subscription", planId, interval: "year", sessionStripeId: session.id },
+      });
+
+      return res.json({ url: session.url });
+    }
+
+    return res.status(400).json({ error: "Invalid checkout type" });
   } catch (error: any) {
     console.error("Checkout error:", error);
     res.status(500).json({ error: error.message || "Failed to create checkout session" });
@@ -92,7 +134,7 @@ router.post("/portal", async (req: Request, res: Response) => {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     const session = await stripeService.createCustomerPortalSession(
       user.stripeCustomerId,
-      `${baseUrl}/settings/billing`
+      `${baseUrl}/pricing`
     );
 
     res.json({ url: session.url });
@@ -105,7 +147,7 @@ router.post("/portal", async (req: Request, res: Response) => {
 router.get("/products", async (_req: Request, res: Response) => {
   try {
     const products = await stripeService.listProductsWithPrices();
-
+    
     const productsMap = new Map<string, any>();
     for (const row of products as any[]) {
       if (!productsMap.has(row.product_id)) {
@@ -140,7 +182,7 @@ router.get("/products", async (_req: Request, res: Response) => {
 router.get("/subscription", async (req: Request, res: Response) => {
   try {
     if (!req.session?.userId) {
-      return res.json({ subscription: null, status: 'inactive', seats: 0 });
+      return res.json({ subscription: null, status: 'inactive', tier: 'payg' });
     }
 
     const user = await stripeService.getUserById(req.session.userId);
@@ -149,19 +191,21 @@ router.get("/subscription", async (req: Request, res: Response) => {
     }
 
     if (!user.stripeSubscriptionId) {
-      return res.json({
-        subscription: null,
+      return res.json({ 
+        subscription: null, 
         status: user.subscriptionStatus || 'inactive',
-        seats: user.seats ?? 1,
+        tier: user.subscriptionTier || 'payg'
       });
     }
 
     const subscription = await stripeService.getSubscription(user.stripeSubscriptionId);
-    res.json({
-      subscription,
+    res.json({ 
+      subscription, 
       status: user.subscriptionStatus,
-      seats: user.seats ?? 1,
+      tier: user.subscriptionTier,
       currentPeriodEnd: user.currentPeriodEnd,
+      monthlyCreditsAllocation: user.monthlyCreditsAllocation,
+      creditsUsedThisPeriod: user.creditsUsedThisPeriod
     });
   } catch (error: any) {
     console.error("Subscription error:", error);
@@ -189,7 +233,7 @@ router.post("/seed-products", async (req: Request, res: Response) => {
     }
 
     const result = await stripeService.seedSubscriptionProducts();
-
+    
     const { getStripeSync } = await import("../stripeClient");
     const stripeSync = await getStripeSync();
     await stripeSync.syncBackfill();
@@ -200,5 +244,7 @@ router.post("/seed-products", async (req: Request, res: Response) => {
     res.status(500).json({ error: error.message || "Failed to seed products" });
   }
 });
+
+export const SUBSCRIPTION_PLAN_CONFIG = SUBSCRIPTION_PLANS;
 
 export default router;

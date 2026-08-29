@@ -29,55 +29,15 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { useToast } from '@/hooks/use-toast';
+import { emitPaymentFailure } from '@/components/payment-failure-dialog';
 import { 
   Loader2, Search, Users, Building2, Mail, Phone, Download, 
   ExternalLink, RefreshCw, CheckCircle, XCircle, Clock, AlertCircle,
   GraduationCap, Briefcase, MapPin, Linkedin, ChevronRight, Database,
-  Play, BarChart3, Trophy, List, Sparkles, Shield, ShieldCheck, ShieldAlert, ShieldX, Copy, PlusSquare, Twitter, Target, Rocket, Eye, EyeOff, Lock, Flag
+  Play, BarChart3, Trophy, List, Sparkles, Shield, Copy, PlusSquare, Twitter, Target, Rocket, Eye, EyeOff, Lock
 } from 'lucide-react';
 
 type MaskedStaff = StaffMember & { schoolName?: string; schoolLogo?: string; isRevealed?: boolean; emailRevealed?: boolean; phoneRevealed?: boolean };
-
-function EmailVerificationBadge({ status, size = 'sm' }: { status?: string | null; size?: 'sm' | 'default' }) {
-  if (!status || status === 'unverified') return null;
-  const iconCls = size === 'default' ? 'h-3.5 w-3.5' : 'h-3 w-3';
-  const config = {
-    verified: { icon: ShieldCheck, label: 'Verified Email', className: 'border-green-600/40 text-green-700 dark:text-green-400' },
-    risky: { icon: ShieldAlert, label: 'Risky Email', className: 'border-amber-600/40 text-amber-700 dark:text-amber-400' },
-    undeliverable: { icon: ShieldX, label: 'Undeliverable', className: 'border-destructive/40 text-destructive' },
-  }[status];
-  if (!config) return null;
-  const Icon = config.icon;
-  return (
-    <Badge variant="outline" className={`gap-1 text-xs ${config.className}`} data-testid={`badge-email-verification-${status}`}>
-      <Icon className={iconCls} />
-      {config.label}
-    </Badge>
-  );
-}
-
-function useReportInaccurateMutation() {
-  const { toast } = useToast();
-  return useMutation({
-    mutationFn: async (staffId: number) => {
-      return await apiRequest('POST', `/api/staff/${staffId}/report`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/staff/members'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/staff/schools'] });
-      toast({ title: 'Thanks for the report', description: "We've flagged this contact for re-verification." });
-    },
-    onError: (e: any) => {
-      const msg = String(e?.message || '');
-      if (msg.includes('login_required') || msg.includes('Authentication required')) {
-        toast({ variant: 'destructive', title: 'Sign in required', description: 'Sign in to report contacts.' });
-        window.location.href = '/login';
-        return;
-      }
-      toast({ variant: 'destructive', title: 'Could not submit report', description: msg || 'Please try again.' });
-    },
-  });
-}
 
 function useRevealMutation() {
   const { toast } = useToast();
@@ -94,6 +54,7 @@ function useRevealMutation() {
       const desc =
         src === 'cached' ? 'Re-reveal within 90 days — free.' :
         src === 'subscription' ? 'Included in your plan.' :
+        src === 'payg_credits' ? '1 credit used.' :
         'Contact revealed.';
       toast({ title: 'Contact revealed', description: desc });
     },
@@ -105,15 +66,16 @@ function useRevealMutation() {
         window.location.href = '/login';
         return;
       }
-      if (payload?.code === 'email_undeliverable' || msg.includes('email_undeliverable')) {
-        toast({
-          title: 'Email is undeliverable',
-          description: payload?.message || 'This email failed deliverability checks and is likely to bounce.',
+      if (payload?.code === 'payment_failed' || msg.includes('payment_failed')) {
+        emitPaymentFailure({
+          message: payload?.message || 'Your card was declined. Update your payment method to keep revealing contacts.',
+          declineCode: payload?.declineCode ?? null,
+          errorCode: payload?.errorCode ?? null,
         });
         return;
       }
-      if (payload?.code === 'subscription_required' || msg.includes('subscription_required')) {
-        toast({ variant: 'destructive', title: 'Subscription required', description: 'Subscribe for $25/seat/month to reveal contacts.' });
+      if (msg.includes('out_of_quota') || msg.includes('quota')) {
+        toast({ variant: 'destructive', title: 'Out of reveals', description: 'Upgrade or buy credits to continue.' });
         window.location.href = '/pricing';
         return;
       }
@@ -191,7 +153,27 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function StaffCard({ member, onClick }: { member: MaskedStaff; onClick?: () => void }) {
+function NetworkBadge({ staffId, connectedAt, connectionName }: { staffId: number; connectedAt?: string | null; connectionName?: string | null }) {
+  const tipParts: string[] = [];
+  if (connectionName) tipParts.push(`Connected to ${connectionName}`);
+  if (connectedAt) tipParts.push(`since ${new Date(connectedAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}`);
+  const tip = tipParts.join(' ') || 'In your LinkedIn network';
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant="secondary" className="text-xs gap-1 cursor-help" data-testid={`badge-in-network-${staffId}`}>
+            <Linkedin className="h-3 w-3" />
+            In your network
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent side="top">{tip}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function StaffCard({ member, onClick, inNetwork, networkConnectedAt, networkConnectionName }: { member: MaskedStaff; onClick?: () => void; inNetwork?: boolean; networkConnectedAt?: string | null; networkConnectionName?: string | null }) {
   const initials = member.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
   const confidence = member.confidence as { overall: number } | null;
   
@@ -210,10 +192,12 @@ function StaffCard({ member, onClick }: { member: MaskedStaff; onClick?: () => v
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-semibold text-foreground truncate" data-testid="text-staff-name">{member.name}</h3>
+              {inNetwork && (
+                <NetworkBadge staffId={member.id} connectedAt={networkConnectedAt} connectionName={networkConnectionName} />
+              )}
               {confidence && confidence.overall >= 80 && (
                 <Badge variant="secondary" className="text-xs">High Confidence</Badge>
               )}
-              <EmailVerificationBadge status={member.emailVerificationStatus} />
             </div>
             {member.title && (
               <p className="text-sm text-muted-foreground truncate" data-testid="text-staff-title">{member.title}</p>
@@ -254,13 +238,18 @@ function ExpandedContactDialog({
   member, 
   open, 
   onOpenChange,
+  inNetwork,
+  networkConnectedAt,
+  networkConnectionName,
 }: { 
   member: MaskedStaff | null; 
   open: boolean; 
   onOpenChange: (open: boolean) => void;
+  inNetwork?: boolean;
+  networkConnectedAt?: string | null;
+  networkConnectionName?: string | null;
 }) {
   const { toast } = useToast();
-  const reportMutation = useReportInaccurateMutation();
   
   if (!member) return null;
   
@@ -295,10 +284,16 @@ function ExpandedContactDialog({
                     {member.schoolName}
                   </Badge>
                 )}
+                {inNetwork && (
+                  <NetworkBadge
+                    staffId={member.id}
+                    connectedAt={networkConnectedAt}
+                    connectionName={networkConnectionName}
+                  />
+                )}
                 {confidence && confidence.overall >= 80 && (
                   <Badge variant="secondary">High Confidence</Badge>
                 )}
-                <EmailVerificationBadge status={member.emailVerificationStatus} size="default" />
               </div>
             </div>
           </div>
@@ -464,17 +459,6 @@ function ExpandedContactDialog({
           ) : (
             <RevealButton staffId={member.id} variant="default" />
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => reportMutation.mutate(member.id)}
-            disabled={reportMutation.isPending || !!member.reportedInaccurateAt}
-            className="gap-2 mr-auto text-muted-foreground"
-            data-testid="button-report-inaccurate"
-          >
-            {reportMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Flag className="h-4 w-4" />}
-            {member.reportedInaccurateAt ? 'Reported' : 'Report wrong contact'}
-          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -603,10 +587,26 @@ function AppSidebar({
                 </Link>
               </SidebarMenuItem>
               <SidebarMenuItem>
+                <Link href="/reports">
+                  <SidebarMenuButton data-testid="nav-reports">
+                    <BarChart3 className="h-4 w-4" />
+                    <span>Reports</span>
+                  </SidebarMenuButton>
+                </Link>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
                 <Link href="/list-matcher">
                   <SidebarMenuButton data-testid="nav-list-matcher">
                     <Target className="h-4 w-4" />
                     <span>List Matcher</span>
+                  </SidebarMenuButton>
+                </Link>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <Link href="/growth">
+                  <SidebarMenuButton data-testid="nav-growth-tools">
+                    <Rocket className="h-4 w-4" />
+                    <span>Growth Tools</span>
                   </SidebarMenuButton>
                 </Link>
               </SidebarMenuItem>
@@ -794,6 +794,16 @@ export default function StaffDirectory() {
     return `/api/staff/members?${params.toString()}`;
   };
   const staffQueryUrl = buildStaffQueryUrl();
+  const networkStaffIdsQuery = useQuery<{
+    staffIds: number[];
+    connectedAt?: Record<string, string | null>;
+    connectionName?: Record<string, string | null>;
+  }>({
+    queryKey: ['/api/linkedin/network-staff-ids'],
+  });
+  const networkStaffIdSet = new Set(networkStaffIdsQuery.data?.staffIds || []);
+  const networkConnectedAt = networkStaffIdsQuery.data?.connectedAt || {};
+  const networkConnectionName = networkStaffIdsQuery.data?.connectionName || {};
 
   const staffQuery = useQuery<StaffMembersResponse>({
     queryKey: [staffQueryUrl],
@@ -1216,6 +1226,9 @@ export default function StaffDirectory() {
                         <StaffCard 
                           key={member.id} 
                           member={member} 
+                          inNetwork={networkStaffIdSet.has(member.id)}
+                          networkConnectedAt={networkConnectedAt[String(member.id)]}
+                          networkConnectionName={networkConnectionName[String(member.id)]}
                           onClick={() => setExpandedContact(member)}
                         />
                       ))}
@@ -1547,6 +1560,13 @@ export default function StaffDirectory() {
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
                             <span>{member.name}</span>
+                            {networkStaffIdSet.has(member.id) && (
+                              <NetworkBadge
+                                staffId={member.id}
+                                connectedAt={networkConnectedAt[String(member.id)]}
+                                connectionName={networkConnectionName[String(member.id)]}
+                              />
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">{member.title || '-'}</TableCell>
@@ -1749,6 +1769,9 @@ export default function StaffDirectory() {
         member={expandedContact}
         open={!!expandedContact}
         onOpenChange={(open) => !open && setExpandedContact(null)}
+        inNetwork={expandedContact ? networkStaffIdSet.has(expandedContact.id) : false}
+        networkConnectedAt={expandedContact ? networkConnectedAt[String(expandedContact.id)] : null}
+        networkConnectionName={expandedContact ? networkConnectionName[String(expandedContact.id)] : null}
       />
     </div>
   );

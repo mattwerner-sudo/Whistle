@@ -89,31 +89,8 @@ interface FailureReasonBreakdown {
   unknown: number;
 }
 
-interface ReverifyRunStats {
-  startedAt: string;
-  finishedAt: string;
-  durationMs: number;
-  batches: number;
-  checked: number;
-  changed: number;
-  trigger: "scheduled" | "manual" | "startup";
-  error?: string;
-}
-
-interface EmailVerificationStatus {
-  enabled: boolean;
-  running: boolean;
-  intervalMs: number;
-  batchSize: number;
-  maxBatchesPerRun: number;
-  staleAfterMs: number;
-  lastRun: ReverifyRunStats | null;
-  nextRunAt: string | null;
-}
-
 interface DataHealthMetrics {
   status: string;
-  emailVerification?: EmailVerificationStatus;
   totalSchools: number;
   extractedSchools: number;
   pendingSchools: number;
@@ -169,22 +146,6 @@ function formatDate(dateStr: string | null): string {
     day: "numeric",
     year: "numeric",
   });
-}
-
-function formatDateTime(dateStr: string | null): string {
-  if (!dateStr) return "Never";
-  const date = new Date(dateStr);
-  return date.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function formatDaysFromMs(ms: number): string {
-  const days = Math.round(ms / (24 * 60 * 60 * 1000));
-  return `${days}d`;
 }
 
 function getFailureReasonLabel(reason: string | null): string {
@@ -445,67 +406,6 @@ export default function DataHealth() {
           </CardContent>
         </Card>
       </div>
-
-      {metrics.emailVerification && (
-        <Card data-testid="card-email-verification">
-          <CardHeader>
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-green-500" />
-                  Email Verification
-                </CardTitle>
-                <CardDescription>
-                  Automatic re-checking of stale and flagged contact emails
-                </CardDescription>
-              </div>
-              <Badge
-                variant={metrics.emailVerification.enabled ? "default" : "outline"}
-                data-testid="badge-reverify-status"
-              >
-                {metrics.emailVerification.running
-                  ? "Running"
-                  : metrics.emailVerification.enabled
-                    ? "Scheduled"
-                    : "Disabled"}
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div>
-                <div className="text-muted-foreground text-xs">Last Run</div>
-                <div className="font-medium" data-testid="text-reverify-last-run">
-                  {formatDateTime(metrics.emailVerification.lastRun?.finishedAt ?? null)}
-                </div>
-              </div>
-              <div>
-                <div className="text-muted-foreground text-xs">Last Result</div>
-                <div className="font-medium" data-testid="text-reverify-last-result">
-                  {metrics.emailVerification.lastRun
-                    ? metrics.emailVerification.lastRun.error
-                      ? `Error: ${metrics.emailVerification.lastRun.error}`
-                      : `${metrics.emailVerification.lastRun.checked} checked, ${metrics.emailVerification.lastRun.changed} changed`
-                    : "\u2014"}
-                </div>
-              </div>
-              <div>
-                <div className="text-muted-foreground text-xs">Next Run</div>
-                <div className="font-medium" data-testid="text-reverify-next-run">
-                  {formatDateTime(metrics.emailVerification.nextRunAt)}
-                </div>
-              </div>
-              <div>
-                <div className="text-muted-foreground text-xs">Settings</div>
-                <div className="font-medium" data-testid="text-reverify-settings">
-                  Stale after {formatDaysFromMs(metrics.emailVerification.staleAfterMs)}, up to{" "}
-                  {metrics.emailVerification.batchSize * metrics.emailVerification.maxBatchesPerRun}/run
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {(["power5", "midTier", "other"] as const).map((tier) => {

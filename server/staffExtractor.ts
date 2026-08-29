@@ -1,6 +1,5 @@
 import * as cheerio from 'cheerio';
-import type { InsertStaffMember, EmailVerificationStatus } from '@shared/schema';
-import { verifyEmail, applyVerificationToConfidence } from './lib/email-verification';
+import type { InsertStaffMember } from '@shared/schema';
 import { getBrowserSession, type BrowserSession } from './lib/browser-pool';
 import { categorizePersona, classifyDepartmentTags } from './lib/ai-extractor';
 import { getRandomUserAgent } from './lib/scraper-health';
@@ -1534,28 +1533,14 @@ export async function extractStaffFromUrl(url: string, usePlaywrightFallback = t
 
 export { isValidContactEmail, isValidPersonName, assessContactQuality };
 
-export async function convertToStaffMembers(
+export function convertToStaffMembers(
   contacts: ExtractedContact[],
   schoolId: string
-): Promise<InsertStaffMember[]> {
-  return Promise.all(contacts.map(async contact => {
+): InsertStaffMember[] {
+  return contacts.map(contact => {
     const { persona, area } = categorizePersona(contact.title);
     const departmentTags = classifyDepartmentTags(contact.title, contact.department);
     const sanitizedEmail = (contact.email && isValidContactEmail(contact.email)) ? contact.email : '';
-
-    // Run the FREE deliverability check and fold it into the confidence score.
-    // Errors resolve to "unverified" inside verifyEmail and never throw, so a bad
-    // DNS lookup can't crash extraction. Blank emails skip the check entirely.
-    let emailVerificationStatus: EmailVerificationStatus = 'unverified';
-    let emailVerifiedAt: Date | null = null;
-    let confidence = contact.confidence;
-    if (sanitizedEmail) {
-      const result = await verifyEmail(sanitizedEmail);
-      emailVerificationStatus = result.status;
-      emailVerifiedAt = result.checkedAt;
-      confidence = applyVerificationToConfidence(confidence, result.status) ?? confidence;
-    }
-
     return {
       schoolId,
       name: contact.name,
@@ -1567,12 +1552,10 @@ export async function convertToStaffMembers(
       linkedinUrl: contact.linkedinUrl || null,
       bioUrl: contact.bioUrl || null,
       imageUrl: contact.imageUrl || null,
-      confidence,
-      emailVerificationStatus,
-      emailVerifiedAt,
+      confidence: contact.confidence,
       buyerPersona: persona,
       functionalArea: area,
       departmentTags,
     };
-  }));
+  });
 }

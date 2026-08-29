@@ -14,75 +14,149 @@ export class StripeService {
 
   async createSubscriptionCheckoutSession(
     customerId: string,
-    seats: number,
+    planId: string,
+    plan: { name: string; credits: number; overageRate: number; tier: string; annualPrice: number },
+    lookupKey: string,
+    interval: 'month' | 'year',
     successUrl: string,
     cancelUrl: string,
-    userId: number
+    userId: number,
+    trialPeriodDays?: number,
   ) {
     const stripe = await getUncachableStripeClient();
-    const lookupKey = 'whistle_standard_monthly';
-
-    // Prefer the pre-created $25/seat price (by lookup key); fall back to
-    // inline price_data for environments that haven't seeded products yet.
-    let lineItem: any = null;
+    
+    // Try to find price by lookup_key first (if prices exist in Stripe Dashboard)
+    // Falls back to creating price_data if lookup_key not found
+    let lineItems: any[];
+    const fallbackPrice = plan.annualPrice;
+    
     try {
-      const prices = await stripe.prices.list({ lookup_keys: [lookupKey] });
+      const prices = await stripe.prices.list({
+        lookup_keys: [lookupKey],
+        expand: ['data.product'],
+      });
+      
       if (prices.data.length > 0) {
-        lineItem = { price: prices.data[0].id, quantity: seats };
+        // Use pre-created price from Stripe Dashboard
+        lineItems = [{
+          price: prices.data[0].id,
+          quantity: 1,
+        }];
+        console.log(`Using Stripe price with lookup_key: ${lookupKey}`);
+      } else {
+        // Fallback: create price_data on-the-fly (for development/testing)
+        console.log(`Lookup key ${lookupKey} not found, using fallback price_data`);
+        lineItems = [{
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: `Whistle ${plan.name} Plan`,
+              description: `${plan.credits} credits/month with ${plan.tier} tier benefits`,
+            },
+            unit_amount: fallbackPrice,
+            recurring: { interval },
+          },
+          quantity: 1,
+        }];
       }
-    } catch {
-      // fall through to price_data
-    }
-    if (!lineItem) {
-      console.log(`Lookup key ${lookupKey} not found, using fallback price_data`);
-      lineItem = {
+    } catch (error) {
+      // If lookup fails, use price_data fallback
+      console.log(`Lookup key search failed, using fallback price_data`);
+      lineItems = [{
         price_data: {
           currency: 'usd',
           product_data: {
-            name: 'Whistle',
-            description: 'Full access to Whistle. $25 per seat per month.',
+            name: `Whistle ${plan.name} Plan`,
+            description: `${plan.credits} credits/month with ${plan.tier} tier benefits`,
           },
-          unit_amount: 2500,
-          recurring: { interval: 'month' },
+          unit_amount: fallbackPrice,
+          recurring: { interval },
         },
-        quantity: seats,
-      };
+        quantity: 1,
+      }];
     }
-
-    // Let the buyer adjust the seat count on the Stripe checkout page too.
-    lineItem.adjustable_quantity = { enabled: true, minimum: 1, maximum: 100 };
 
     return await stripe.checkout.sessions.create({
       customer: customerId,
       payment_method_types: ['card'],
-      line_items: [lineItem],
+      line_items: lineItems,
       mode: 'subscription',
       success_url: successUrl,
       cancel_url: cancelUrl,
-      metadata: {
+      metadata: { 
         userId: String(userId),
-        planId: 'standard',
-        seats: String(seats),
+        planId,
+        tier: plan.tier,
+        credits: String(plan.credits),
+        overageRate: String(plan.overageRate),
         type: 'subscription',
       },
       subscription_data: {
         metadata: {
           userId: String(userId),
-          planId: 'standard',
+          planId,
+          tier: plan.tier,
+          credits: String(plan.credits),
+          overageRate: String(plan.overageRate),
         },
+        ...(trialPeriodDays ? { trial_period_days: trialPeriodDays } : {}),
       },
     });
   }
 
-  // Change the seat quantity on an existing subscription (prorated).
-  async updateSubscriptionSeats(subscriptionId: string, seats: number) {
+  async createCreditCheckoutSession(
+    customerId: string,
+    packageId: string,
+    creditPackage: { credits: number; price: number; name: string },
+    successUrl: string,
+    cancelUrl: string,
+    userId: number
+  ) {
     const stripe = await getUncachableStripeClient();
-    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-    const itemId = subscription.items.data[0]?.id;
-    if (!itemId) throw new Error('Subscription has no line items');
-    return await stripe.subscriptions.update(subscriptionId, {
-      items: [{ id: itemId, quantity: seats }],
-      proration_behavior: 'create_prorations',
+    return await stripe.checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: creditPackage.name,
+            description: `${creditPackage.credits} credits for Whistle`,
+          },
+          unit_amount: creditPackage.price,
+        },
+        quantity: 1,
+      }],
+      mode: 'payment',
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      metadata: { 
+        userId: String(userId),
+        packageId,
+        credits: String(creditPackage.credits),
+        type: 'credit_purchase',
+      },
+    });
+  }
+
+  async createPaygSetupCheckoutSession(
+    customerId: string,
+    successUrl: string,
+    cancelUrl: string,
+    userId: number
+  ) {
+    const stripe = await getUncachableStripeClient();
+    return await stripe.checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      mode: 'setup',
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      metadata: {
+        userId: String(userId),
+        type: 'payg_setup',
+        tier: 'payg',
+      },
     });
   }
 
@@ -167,9 +241,33 @@ export class StripeService {
     priceId?: string;
     currentPeriodEnd?: Date;
     currentPeriodStart?: Date;
-    seats?: number;
+    monthlyCreditsAllocation?: number;
+    creditsUsedThisPeriod?: number;
+    overageRate?: number;
   }) {
     const [user] = await db.update(users).set(stripeInfo).where(eq(users.id, userId)).returning();
+    return user;
+  }
+
+  async addCreditsToUser(userId: number, credits: number) {
+    const [user] = await db.update(users)
+      .set({ 
+        creditsBalance: sql`${users.creditsBalance} + ${credits}` 
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
+  }
+
+  async resetPeriodUsage(userId: number, newCredits: number) {
+    const [user] = await db.update(users)
+      .set({ 
+        creditsBalance: sql`${users.creditsBalance} + ${newCredits}`,
+        creditsUsedThisPeriod: 0,
+        currentPeriodStart: new Date(),
+      })
+      .where(eq(users.id, userId))
+      .returning();
     return user;
   }
 
@@ -185,30 +283,48 @@ export class StripeService {
 
   async seedSubscriptionProducts() {
     const stripe = await getUncachableStripeClient();
-
-    const existing = await stripe.prices.list({ lookup_keys: ['whistle_standard_monthly'] });
-    if (existing.data.length > 0) {
-      console.log('Standard price already exists, skipping seed');
-      return { created: false, priceId: existing.data[0].id };
+    
+    const existingProducts = await stripe.products.list({ limit: 10 });
+    if (existingProducts.data.length > 0) {
+      console.log('Products already exist, skipping seed');
+      return { created: false, products: existingProducts.data };
     }
 
-    const product = await stripe.products.create({
-      name: 'Whistle',
-      description: 'Full access to Whistle. $25 per seat per month.',
-      metadata: { tier: 'standard' },
+    // Pro: $100/mo, 150 reveals + $0.50 overage
+    const proProduct = await stripe.products.create({
+      name: 'Whistle Pro',
+      description: '150 reveals/month + $0.50 per overage reveal',
+      metadata: { tier: 'pro', credits: '150', overageRate: '50' }
     });
 
-    const price = await stripe.prices.create({
-      product: product.id,
-      unit_amount: 2500,
+    // Team: $400/mo, 800 reveals + $0.40 overage
+    const teamProduct = await stripe.products.create({
+      name: 'Whistle Team',
+      description: '800 reveals/month + $0.40 per overage reveal',
+      metadata: { tier: 'team', credits: '800', overageRate: '40' }
+    });
+
+    await stripe.prices.create({
+      product: proProduct.id,
+      unit_amount: 10000,
       currency: 'usd',
       recurring: { interval: 'month' },
-      lookup_key: 'whistle_standard_monthly',
-      metadata: { tier: 'standard' },
+      lookup_key: 'whistle_pro_monthly',
+      metadata: { tier: 'pro', credits: '150', overageRate: '50' }
     });
 
-    console.log('Created Whistle standard product ($25/seat/month)');
-    return { created: true, productId: product.id, priceId: price.id };
+    await stripe.prices.create({
+      product: teamProduct.id,
+      unit_amount: 40000,
+      currency: 'usd',
+      recurring: { interval: 'month' },
+      lookup_key: 'whistle_team_monthly',
+      metadata: { tier: 'team', credits: '800', overageRate: '40' }
+    });
+
+    console.log(`Created products: Pro ($100/mo, 150 reveals), Team ($400/mo, 800 reveals)`);
+
+    return { created: true, products: [proProduct, teamProduct] };
   }
 }
 

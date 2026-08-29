@@ -1,6 +1,85 @@
 import { db } from "../db";
 import { careerHistory, staffMembers, signals, schoolDirectories } from "@shared/schema";
-import { eq, and, inArray, desc, sql } from "drizzle-orm";
+import { eq, and, inArray, desc, sql, gte } from "drizzle-orm";
+import { dispatchSignalAlerts } from "./alert-subscriptions";
+import { GoogleGenAI, Type } from "@google/genai";
+
+let genAI: GoogleGenAI | null = null;
+function getGenAI(): GoogleGenAI | null {
+  if (!process.env.GEMINI_API_KEY) return null;
+  if (!genAI) genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  return genAI;
+}
+
+// Score a signal's sales relevance asynchronously (fire-and-forget from callers).
+async function enrichSignalWithAI(signalId: number, signalType: string, description: string, schoolId: string | null): Promise<void> {
+  const ai = getGenAI();
+  if (!ai) return;
+
+  const prompt = `A B2B vendor selling technology and services into college athletic departments sees this signal:
+
+Signal type: ${signalType}
+Description: ${description}
+
+Score the sales relevance of this signal from 0 to 100, where:
+- 0 = not relevant (e.g. minor admin change, unrelated)
+- 50 = moderately relevant (worth noting)
+- 100 = extremely relevant (new AD, major tech decision, large hiring wave)
+
+Return the score and a one-sentence reason.`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-flash-latest",
+      contents: prompt,
+      config: {
+        // Structured output: the model is constrained to this shape, so a
+        // malformed reply can't silently masquerade as "no result".
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            score: { type: Type.NUMBER },
+            reason: { type: Type.STRING },
+          },
+          required: ["score", "reason"],
+        },
+      },
+    });
+    const parsed = JSON.parse(response.text ?? "");
+    const score = Number(parsed.score);
+    if (isNaN(score)) return;
+
+    // Update signal metadata with relevance score
+    const [current] = await db.select({ metadata: signals.metadata }).from(signals).where(eq(signals.id, signalId)).limit(1);
+    const meta = (current?.metadata as Record<string, any>) ?? {};
+    await db.update(signals).set({ metadata: { ...meta, relevanceScore: score, relevanceReason: parsed.reason } }).where(eq(signals.id, signalId));
+
+    // Update school priorityScore if high-relevance signals are clustering
+    if (schoolId && score >= 75) {
+      const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const recentHighRelevance = await db
+        .select({ id: signals.id })
+        .from(signals)
+        .where(
+          and(
+            eq(signals.schoolId, schoolId),
+            gte(signals.detectedAt, cutoff),
+            sql`(${signals.metadata}->>'relevanceScore')::numeric >= 75`,
+          ),
+        )
+        .limit(5);
+
+      if (recentHighRelevance.length >= 3) {
+        const [school] = await db.select({ priorityScore: schoolDirectories.priorityScore }).from(schoolDirectories).where(eq(schoolDirectories.schoolId, schoolId)).limit(1);
+        const current = Number(school?.priorityScore ?? 0);
+        await db.update(schoolDirectories).set({ priorityScore: Math.min(100, current + 10) }).where(eq(schoolDirectories.schoolId, schoolId));
+      }
+    }
+  } catch {
+    // Non-critical — enrichment failure doesn't break signal creation
+  }
+}
 
 export interface WarmPath {
   staffId: number;
@@ -152,7 +231,7 @@ export async function createNewHireSignal(
     ? `New hire: ${staffName} (${staffTitle || 'Unknown Role'}) at ${schoolName} - came from ${previousSchoolName}`
     : `New hire: ${staffName} (${staffTitle || 'Unknown Role'}) at ${schoolName}`;
 
-  await db.insert(signals).values({
+  const [newHireRow] = await db.insert(signals).values({
     schoolId,
     staffId,
     type: 'new_hire',
@@ -165,7 +244,9 @@ export async function createNewHireSignal(
       oldSchool: previousSchoolId,
       oldSchoolName: previousSchoolName,
     }
-  });
+  }).returning({ id: signals.id });
+  dispatchSignalAlerts({ type: 'new_hire', description, schoolId, staffId, metadata: { staffName, staffTitle } }).catch(() => {});
+  if (newHireRow) enrichSignalWithAI(newHireRow.id, 'new_hire', description, schoolId).catch(() => {});
 }
 
 export async function createDepartureSignal(
@@ -175,18 +256,41 @@ export async function createDepartureSignal(
   schoolId: string,
   schoolName: string
 ): Promise<void> {
-  await db.insert(signals).values({
+  const departureDescription = `Departure: ${staffName} (${staffTitle || 'Unknown Role'}) left ${schoolName}`;
+  const [departureRow] = await db.insert(signals).values({
     schoolId,
     staffId,
     type: 'departure',
-    description: `Departure: ${staffName} (${staffTitle || 'Unknown Role'}) left ${schoolName}`,
+    description: departureDescription,
     metadata: {
       staffName,
       staffTitle: staffTitle || undefined,
       oldSchool: schoolId,
       oldSchoolName: schoolName,
     }
-  });
+  }).returning({ id: signals.id });
+  dispatchSignalAlerts({ type: 'departure', description: departureDescription, schoolId, staffId, metadata: { staffName, staffTitle } }).catch(() => {});
+  if (departureRow) enrichSignalWithAI(departureRow.id, 'departure', departureDescription, schoolId).catch(() => {});
+}
+
+export async function createTitleChangeSignal(
+  staffId: number,
+  staffName: string,
+  schoolId: string,
+  schoolName: string,
+  oldTitle: string,
+  newTitle: string,
+): Promise<void> {
+  const description = `Title change: ${staffName} at ${schoolName} — ${oldTitle} → ${newTitle}`;
+  const [titleRow] = await db.insert(signals).values({
+    schoolId,
+    staffId,
+    type: 'title_change',
+    description,
+    metadata: { staffName, oldTitle, newTitle, schoolName },
+  }).returning({ id: signals.id });
+  dispatchSignalAlerts({ type: 'title_change', description, schoolId, staffId, metadata: { staffName, oldTitle, newTitle } }).catch(() => {});
+  if (titleRow) enrichSignalWithAI(titleRow.id, 'title_change', description, schoolId).catch(() => {});
 }
 
 export async function getRecentSignals(limit: number = 50, callerUserId?: number) {

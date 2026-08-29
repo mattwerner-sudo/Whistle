@@ -17,13 +17,6 @@ export async function sendMail(msg: MailMessage): Promise<{ delivered: boolean; 
   const from = process.env.MAIL_FROM || "noreply@whistle.app";
 
   if (!apiKey) {
-    // Startup refuses to boot in production without SENDGRID_API_KEY
-    // (see server/index.ts), but guard here too in case env vars change
-    // at runtime — never silently pretend an email was handled in prod.
-    if (process.env.NODE_ENV === "production") {
-      console.error(`[Mailer] FATAL: SENDGRID_API_KEY missing in production; refusing to silently drop email to=${msg.to}`);
-      throw new Error("Email provider is not configured (SENDGRID_API_KEY missing)");
-    }
     console.log(`[Mailer] (no SENDGRID_API_KEY) would send to=${msg.to} subject="${msg.subject}"`);
     console.log(`[Mailer] body: ${msg.text.slice(0, 500)}`);
     return { delivered: false, reason: "no_api_key" };

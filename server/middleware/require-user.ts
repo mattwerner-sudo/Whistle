@@ -27,15 +27,26 @@ export async function attachUser(req: UserRequest, _res: Response, next: NextFun
   next();
 }
 
-// Single-plan model: any active subscription grants full access.
-export function requireActiveSubscription() {
+const PLAN_RANK: Record<string, number> = {
+  free: 0,
+  payg: 1,
+  pro: 2,
+  team: 3,
+  enterprise: 4,
+};
+
+export function requirePlan(min: "pro" | "team" | "enterprise") {
   return (req: UserRequest, res: Response, next: NextFunction) => {
     const user = req.user;
     if (!user) return res.status(401).json({ error: "Authentication required" });
-    if (user.subscriptionStatus !== "active") {
+    const tier = user.subscriptionTier || "payg";
+    const active = user.subscriptionStatus === "active";
+    const userRank = active ? (PLAN_RANK[tier] ?? 0) : 0;
+    if (userRank < PLAN_RANK[min]) {
       return res.status(403).json({
-        error: "Active subscription required",
-        subscriptionRequired: true,
+        error: "Plan upgrade required",
+        requiredPlan: min,
+        currentPlan: tier,
       });
     }
     next();

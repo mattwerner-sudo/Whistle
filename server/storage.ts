@@ -26,7 +26,7 @@ import {
   type ChangeType
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, ilike, or, and, sql, desc, asc, gte, lte, lt, isNull, isNotNull } from "drizzle-orm";
+import { eq, ilike, or, and, sql, desc, asc, gte, lte, isNull, isNotNull, lt } from "drizzle-orm";
 import { createHash } from "crypto";
 import { nameSimilarity as nameSimilarityFn } from "./staffExtractor";
 
@@ -98,9 +98,9 @@ export interface IStorage {
   }): Promise<StaffChangeLog[]>;
   
   // Saved Lists
-  getSavedLists(userId?: number): Promise<(SavedList & { itemCount: number })[]>;
+  getSavedLists(): Promise<(SavedList & { itemCount: number })[]>;
   createSavedList(list: InsertSavedList): Promise<SavedList>;
-  getSavedListWithItems(listId: number, userId?: number): Promise<(SavedList & { items: (SavedListItem & { staff: StaffMember })[] }) | undefined>;
+  getSavedListWithItems(listId: number): Promise<(SavedList & { items: (SavedListItem & { staff: StaffMember })[] }) | undefined>;
   addToSavedList(item: InsertSavedListItem): Promise<SavedListItem>;
   removeFromSavedList(listId: number, staffId: number): Promise<void>;
   deleteSavedList(listId: number): Promise<void>;
@@ -343,9 +343,6 @@ export class DatabaseStorage implements IStorage {
           bioUrl: staffMembers.bioUrl,
           imageUrl: staffMembers.imageUrl,
           confidence: staffMembers.confidence,
-          emailVerificationStatus: staffMembers.emailVerificationStatus,
-          emailVerifiedAt: staffMembers.emailVerifiedAt,
-          reportedInaccurateAt: staffMembers.reportedInaccurateAt,
           extractedAt: staffMembers.extractedAt,
           updatedAt: staffMembers.updatedAt,
           schoolName: schoolDirectories.schoolName,
@@ -401,6 +398,7 @@ export class DatabaseStorage implements IStorage {
         const mergedDeptTags = (member.departmentTags ?? existing.departmentTags) as string[] | null | undefined;
         const merged = {
           updatedAt: new Date(),
+          lastScrapedAt: new Date(),
           schoolId: member.schoolId,
           name: pickBest(member.name, existing.name) ?? existing.name,
           title: pickBest(member.title, existing.title),
@@ -415,11 +413,6 @@ export class DatabaseStorage implements IStorage {
           departmentTags: mergedDeptTags,
           buyerPersona: member.buyerPersona ?? existing.buyerPersona,
           functionalArea: member.functionalArea ?? existing.functionalArea,
-          emailVerificationStatus: member.emailVerificationStatus ?? existing.emailVerificationStatus,
-          emailVerifiedAt: member.emailVerifiedAt ?? existing.emailVerifiedAt,
-          // Only an actual verification pass (emailVerifiedAt set) clears a prior
-          // "reported wrong" flag — the default 'unverified' status must not.
-          reportedInaccurateAt: member.emailVerifiedAt ? null : existing.reportedInaccurateAt,
         };
 
         const [updated] = await db
@@ -452,6 +445,7 @@ export class DatabaseStorage implements IStorage {
           name: member.name ?? fuzzyMatch.name,
           schoolId: member.schoolId,
           updatedAt: new Date(),
+          lastScrapedAt: new Date(),
           email: pickBest(member.email, fuzzyMatch.email) ?? fuzzyMatch.email,
           phone: pickBest(member.phone, fuzzyMatch.phone),
           title: (member.title && member.title.length > 2) ? member.title : (fuzzyMatch.title ?? member.title),
@@ -464,9 +458,6 @@ export class DatabaseStorage implements IStorage {
           departmentTags: deptTags,
           buyerPersona: member.buyerPersona ?? fuzzyMatch.buyerPersona,
           functionalArea: member.functionalArea ?? fuzzyMatch.functionalArea,
-          emailVerificationStatus: member.emailVerificationStatus ?? fuzzyMatch.emailVerificationStatus,
-          emailVerifiedAt: member.emailVerifiedAt ?? fuzzyMatch.emailVerifiedAt,
-          reportedInaccurateAt: member.emailVerifiedAt ? null : fuzzyMatch.reportedInaccurateAt,
         };
 
         const [updated] = await db
@@ -480,6 +471,7 @@ export class DatabaseStorage implements IStorage {
 
     const insertData = {
       ...member,
+      lastScrapedAt: new Date(),
       departmentTags: (member.departmentTags ?? null) as string[] | null,
     };
     const [created] = await db
@@ -548,14 +540,6 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  // Evergreen maintenance: re-run free verification. By default this targets
-  // records that were never verified, were flagged for re-verification
-  // (emailVerifiedAt null), OR whose last check is older than `staleAfterMs`
-  // (default 30 days). Pass `force: true` to re-verify every record with an
-  // email regardless of when it was last checked. Confidence recomputation is
-  // idempotent (see applyVerificationToConfidence), so repeated runs never drift.
-  // Bounded by `limit`; per-record errors are swallowed so one bad lookup can't
-  // abort the batch.
   async reverifyStaffEmails(
     limit: number = 100,
     opts: { force?: boolean; staleAfterMs?: number } = {},
@@ -825,10 +809,8 @@ export class DatabaseStorage implements IStorage {
   }
   
   // Saved Lists Implementation
-  async getSavedLists(userId?: number): Promise<(SavedList & { itemCount: number })[]> {
-    const lists = userId !== undefined
-      ? await db.select().from(savedLists).where(eq(savedLists.userId, userId)).orderBy(desc(savedLists.createdAt))
-      : await db.select().from(savedLists).orderBy(desc(savedLists.createdAt));
+  async getSavedLists(): Promise<(SavedList & { itemCount: number })[]> {
+    const lists = await db.select().from(savedLists).orderBy(desc(savedLists.createdAt));
     
     // Get item counts for each list
     const results = await Promise.all(
@@ -849,12 +831,8 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
   
-  async getSavedListWithItems(listId: number, userId?: number): Promise<(SavedList & { items: (SavedListItem & { staff: StaffMember })[] }) | undefined> {
-    const [list] = await db.select().from(savedLists).where(
-      userId !== undefined
-        ? and(eq(savedLists.id, listId), eq(savedLists.userId, userId))
-        : eq(savedLists.id, listId)
-    );
+  async getSavedListWithItems(listId: number): Promise<(SavedList & { items: (SavedListItem & { staff: StaffMember })[] }) | undefined> {
+    const [list] = await db.select().from(savedLists).where(eq(savedLists.id, listId));
     if (!list) return undefined;
     
     const items = await db

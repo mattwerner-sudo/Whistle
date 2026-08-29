@@ -77,6 +77,9 @@ export const staffMembers = pgTable("staff_members", {
     overall: number;
     emailBase?: number;
   }>(),
+  // Provenance of the email address, per the data-quality standard in CLAUDE.md:
+  // 'confirmed' (bounce-verified) | 'extracted' (AI-parsed from page) | 'inferred' (guessed from school pattern)
+  emailConfidence: text("email_confidence"),
   // Email deliverability verification (free tier: DNS/MX + heuristics, no SMTP probe).
   // Values: 'verified' | 'risky' | 'undeliverable' | 'unverified'. null = never checked.
   emailVerificationStatus: text("email_verification_status"),
@@ -90,6 +93,7 @@ export const staffMembers = pgTable("staff_members", {
   departmentTags: jsonb("department_tags").$type<string[]>(), // e.g. ["Football", "Basketball", "Admin"]
   extractedAt: timestamp("extracted_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  lastScrapedAt: timestamp("last_scraped_at"),
 }, (table) => ({
   searchIdx: index("staff_search_idx").using("gin", sql`to_tsvector('english', ${table.name} || ' ' || coalesce(${table.title}, '') || ' ' || coalesce(${table.department}, ''))`),
   schoolIdx: index("staff_school_idx").on(table.schoolId),
@@ -287,6 +291,23 @@ export const signals = pgTable("signals", {
     connectionHeadline?: string;
     connectionProfileUrl?: string;
     matchConfidence?: number;
+    // title_change fields
+    oldTitle?: string;
+    newTitle?: string;
+    schoolName?: string;
+    // AI signal enrichment (server/lib/graph-engine.ts)
+    relevanceScore?: number;
+    relevanceReason?: string;
+    // Provenance: 'news_monitor' | 'job_board' | undefined (scrape-detected)
+    source?: string;
+    // news_monitor fields
+    articleTitle?: string;
+    articleUrl?: string;
+    // job_posting fields
+    jobTitle?: string;
+    postingUrl?: string;
+    sourceBoard?: string;
+    department?: string;
   }>(),
   detectedAt: timestamp("detected_at").defaultNow(),
   isActioned: boolean("is_actioned").default(false), // Has the user used this signal?
@@ -353,27 +374,7 @@ export const insertSchoolDirectorySchema = createInsertSchema(schoolDirectories)
   updatedAt: true,
 });
 
-// Confidence Score Schema
-export const confidenceScoreSchema = z.object({
-  name: z.number().min(0).max(100),
-  title: z.number().min(0).max(100),
-  email: z.number().min(0).max(100),
-  phone: z.number().min(0).max(100),
-  overall: z.number().min(0).max(100),
-  // Immutable pre-verification email sub-score. `email` above is derived by
-  // applying the deliverability multiplier to this base, so re-running
-  // verification never compounds penalties. Optional for backward compatibility
-  // with rows written before this field existed.
-  emailBase: z.number().min(0).max(100).optional(),
-});
-
-export type ConfidenceScore = z.infer<typeof confidenceScoreSchema>;
-
-export const insertStaffMemberSchema = createInsertSchema(staffMembers, {
-  // drizzle-zod infers optional jsonb sub-fields as `unknown`; pin the confidence
-  // shape to the explicit schema so `emailBase` types correctly.
-  confidence: confidenceScoreSchema.nullish(),
-}).omit({
+export const insertStaffMemberSchema = createInsertSchema(staffMembers).omit({
   id: true,
   extractedAt: true,
   updatedAt: true,
@@ -523,6 +524,16 @@ export type BuyerPersona = 'champion' | 'signer' | 'blocker' | 'influencer' | 'u
 export type FunctionalArea = 'executive' | 'operations' | 'finance' | 'external' | 'performance' | 'general';
 export type BuyingWindowStatus = 'open' | 'closed' | 'planning';
 
+// Confidence Score Schema
+export const confidenceScoreSchema = z.object({
+  name: z.number().min(0).max(100),
+  title: z.number().min(0).max(100),
+  email: z.number().min(0).max(100),
+  phone: z.number().min(0).max(100),
+  overall: z.number().min(0).max(100),
+});
+
+export type ConfidenceScore = z.infer<typeof confidenceScoreSchema>;
 
 // Contact Person Schema
 export const contactPersonSchema = z.object({
@@ -682,7 +693,6 @@ export const users = pgTable("users", {
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   subscriptionStatus: text("subscription_status").default("inactive"), // 'active', 'past_due', 'canceled', 'inactive'
-  seats: integer("seats").default(1), // Seat quantity on the subscription
   priceId: text("price_id"), // Track which tier they bought
   currentPeriodEnd: timestamp("current_period_end"), // When access expires
   currentPeriodStart: timestamp("current_period_start"), // When billing period started
@@ -691,6 +701,7 @@ export const users = pgTable("users", {
   // When the user clicked "I accept" on the Terms of Service / Privacy Policy.
   // Required before they can pay, but free signups are recorded too.
   tosAcceptedAt: timestamp("tos_accepted_at"),
+  organizationId: integer("organization_id"),
 });
 
 // Payment failures — every off-session charge attempt that Stripe rejects
@@ -768,7 +779,6 @@ export const entitlements = pgTable("entitlements", {
   userId: integer("user_id").primaryKey(),
   tier: text("tier").notNull().default("free"),
   status: text("status").notNull().default("inactive"),
-  seats: integer("seats").notNull().default(1),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   monthlyAllocation: integer("monthly_allocation").notNull().default(0),
@@ -831,6 +841,104 @@ export const sessions = pgTable("sessions", {
 }, (table) => ({
   expireIdx: index("sessions_expire_idx").on(table.expire),
 }));
+
+// ============================================================================
+// ALERT SUBSCRIPTIONS - Signal notification preferences
+// ============================================================================
+
+export const alertSubscriptions = pgTable("alert_subscriptions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  schoolId: text("school_id"),            // null = watch all schools
+  signalTypes: jsonb("signal_types").$type<string[]>().notNull().default([]), // e.g. ['new_hire','departure']
+  frequency: text("frequency").notNull().default("instant"), // 'instant' | 'daily' | 'weekly'
+  slackWebhookUrl: text("slack_webhook_url"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdx: index("alert_subs_user_idx").on(table.userId),
+  schoolIdx: index("alert_subs_school_idx").on(table.schoolId),
+}));
+export type AlertSubscription = typeof alertSubscriptions.$inferSelect;
+
+// ============================================================================
+// JOB POSTINGS - Athletic department job board signal
+// ============================================================================
+
+export const jobPostings = pgTable("job_postings", {
+  id: serial("id").primaryKey(),
+  schoolId: text("school_id"),
+  schoolName: text("school_name"),
+  jobTitle: text("job_title").notNull(),
+  department: text("department"),
+  postingUrl: text("posting_url").notNull().unique(),
+  sourceBoard: text("source_board"), // 'ncaa_market' | 'teamwork_online' | 'higheredJobs'
+  postedAt: timestamp("posted_at"),
+  detectedAt: timestamp("detected_at").defaultNow().notNull(),
+  isActive: boolean("is_active").default(true),
+}, (table) => ({
+  schoolIdx: index("job_postings_school_idx").on(table.schoolId),
+  detectedIdx: index("job_postings_detected_idx").on(table.detectedAt),
+}));
+export type JobPosting = typeof jobPostings.$inferSelect;
+
+// ============================================================================
+// NIL COLLECTIVES - Separate buying entities for top athletic programs
+// ============================================================================
+
+export const nilCollectives = pgTable("nil_collectives", {
+  id: serial("id").primaryKey(),
+  schoolId: text("school_id"),
+  name: text("name").notNull(),
+  website: text("website"),
+  structure: text("structure"), // 'nonprofit' | 'llc' | 'unknown'
+  estimatedBudget: text("estimated_budget"),
+  detectedAt: timestamp("detected_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  schoolIdx: index("nil_collectives_school_idx").on(table.schoolId),
+}));
+export type NilCollective = typeof nilCollectives.$inferSelect;
+
+// ============================================================================
+// ORGANIZATIONS - Multi-seat team billing
+// ============================================================================
+
+export const organizations = pgTable("organizations", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  ownerUserId: integer("owner_user_id").notNull(),
+  seatLimit: integer("seat_limit").notNull().default(1), // 1=Pro, 5=Team, -1=Enterprise unlimited
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type Organization = typeof organizations.$inferSelect;
+
+export const organizationMembers = pgTable("organization_members", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull(),
+  userId: integer("user_id").notNull(),
+  role: text("role").notNull().default("member"), // 'owner' | 'member'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  orgUserUnique: uniqueIndex("org_members_org_user_unique").on(table.organizationId, table.userId),
+  orgIdx: index("org_members_org_idx").on(table.organizationId),
+  userIdx: index("org_members_user_idx").on(table.userId),
+}));
+export type OrganizationMember = typeof organizationMembers.$inferSelect;
+
+export const organizationInvites = pgTable("organization_invites", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull(),
+  email: text("email").notNull(),
+  token: text("token").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  acceptedAt: timestamp("accepted_at"),
+}, (table) => ({
+  tokenIdx: index("org_invites_token_idx").on(table.token),
+  orgIdx: index("org_invites_org_idx").on(table.organizationId),
+}));
+export type OrganizationInvite = typeof organizationInvites.$inferSelect;
 
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,

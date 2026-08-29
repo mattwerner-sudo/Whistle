@@ -89,7 +89,7 @@ ${truncatedHtml}
 `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp",
+      model: "gemini-flash-latest",
       contents: prompt,
     });
 
@@ -289,7 +289,7 @@ Area definitions:
 `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp",
+      model: "gemini-flash-latest",
       contents: prompt,
     });
 
@@ -443,7 +443,7 @@ Return an empty array [] if no tags apply.
 `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp",
+      model: "gemini-flash-latest",
       contents: prompt,
     });
 
@@ -461,5 +461,53 @@ Return an empty array [] if no tags apply.
   } catch (error: any) {
     console.error("[AI-Extractor] Department classification failed:", error.message);
     return [];
+  }
+}
+
+/**
+ * Infer a missing email address using the school's confirmed email patterns.
+ *
+ * Looks at existing staff emails from the same school, detects the pattern
+ * (first.last, flast, firstl, etc.), then applies it to the target name.
+ * Returns null if pattern is ambiguous or GEMINI_API_KEY is not set.
+ * The caller should store the result with emailConfidence = 'inferred'.
+ */
+export async function inferEmailFromPattern(
+  name: string,
+  schoolId: string,
+  confirmedEmails: string[], // other staff emails from same school
+): Promise<string | null> {
+  const ai = getGenAI();
+  if (!ai || !confirmedEmails.length || !name) return null;
+
+  // Only use emails from the same domain (filter out personal/non-edu)
+  const eduEmails = confirmedEmails.filter((e) => e.includes("@") && e.split("@")[1]?.includes(".edu"));
+  if (eduEmails.length < 2) return null; // not enough signal
+
+  const prompt = `You are helping infer a missing work email address.
+
+These are confirmed email addresses from staff at the same university:
+${eduEmails.slice(0, 10).join("\n")}
+
+The person whose email is unknown is: ${name}
+
+1. Detect the email pattern (e.g., first.last@domain.edu, flast@domain.edu, first@domain.edu, etc.)
+2. Apply the pattern to the person's name
+3. Return ONLY the inferred email address. No explanation. No markdown.
+
+If the pattern is unclear or you are not confident, return exactly: null`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-flash-latest",
+      contents: prompt,
+    });
+    const text = (response.text ?? "").trim().toLowerCase();
+    if (text === "null" || !text.includes("@")) return null;
+    // Basic validation
+    if (!/^[a-z0-9._-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(text)) return null;
+    return text;
+  } catch {
+    return null;
   }
 }

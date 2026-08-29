@@ -1,33 +1,22 @@
+import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import pgSession from "connect-pg-simple";
 import { runMigrations } from 'stripe-replit-sync';
 import { registerRoutes } from "./routes";
+import { initCron } from "./lib/cron";
+import { startReverifyScheduler } from "./lib/reverify-scheduler";
 import { setupVite, serveStatic, log } from "./vite";
 import { pool } from "./db";
 import { getStripeSync } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
 import stripeRoutes from "./routes/stripe";
-import { requireApiAuth } from "./middleware/auth";
-import { startReverifyScheduler } from "./lib/reverify-scheduler";
 
 if (!process.env.ADMIN_SECRET || process.env.ADMIN_SECRET.trim().length === 0) {
   console.error(
     "FATAL: ADMIN_SECRET is not set. Admin endpoints (e.g. /api/admin/*, " +
     "/api/stripe/seed-products) refuse to start without it. Set ADMIN_SECRET " +
     "to a strong random value in this environment's Secrets."
-  );
-  process.exit(1);
-}
-
-if (
-  process.env.NODE_ENV === "production" &&
-  (!process.env.SENDGRID_API_KEY || process.env.SENDGRID_API_KEY.trim().length === 0)
-) {
-  console.error(
-    "FATAL: SENDGRID_API_KEY is not set in production. Email verification, " +
-    "password resets, and account notifications would silently fail. Set " +
-    "SENDGRID_API_KEY in this deployment's Secrets before launching."
   );
   process.exit(1);
 }
@@ -107,10 +96,6 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: false, limit: '50mb' }));
 
-// Default-deny auth gate for every /api route (webhooks are registered
-// above, before this gate; public paths are allowlisted inside).
-app.use(requireApiAuth);
-
 app.use('/api/stripe', stripeRoutes);
 
 app.use((req, res, next) => {
@@ -149,6 +134,12 @@ async function initStripe() {
     console.log('Skipping Stripe init: DATABASE_URL not set');
     return;
   }
+  // Off Replit, Stripe credentials come from the environment. Without a key,
+  // billing is simply disabled — don't attempt the legacy Replit connector.
+  if (!process.env.STRIPE_SECRET_KEY && !process.env.REPL_IDENTITY && !process.env.WEB_REPL_RENEWAL) {
+    console.log('Skipping Stripe init: STRIPE_SECRET_KEY not set (billing disabled)');
+    return;
+  }
 
   try {
     console.log('Initializing Stripe schema...');
@@ -158,7 +149,10 @@ async function initStripe() {
     const stripeSync = await getStripeSync();
 
     console.log('Setting up managed webhook...');
-    const webhookBaseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+    // APP_URL off Replit (e.g. https://gowhistle.io); REPLIT_DOMAINS is the legacy fallback.
+    const webhookBaseUrl = process.env.APP_URL && !process.env.APP_URL.includes('localhost')
+      ? process.env.APP_URL.replace(/\/$/, '')
+      : `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
     const webhookResult = await stripeSync.findOrCreateManagedWebhook(
       `${webhookBaseUrl}/api/stripe/webhook`
     );
@@ -180,7 +174,12 @@ async function initStripe() {
 (async () => {
   try {
     await initStripe();
-    
+    initCron();
+
+    // Re-queue work stranded by the previous shutdown (in-memory queue).
+    const { recoverInterruptedJobs } = await import("./lib/job-queue");
+    recoverInterruptedJobs();
+
     const server = await registerRoutes(app);
 
     // Health check endpoint for production deployment
@@ -212,15 +211,14 @@ async function initStripe() {
     // this serves both the API and the client.
     // It is the only port that is not firewalled.
     const port = parseInt(process.env.PORT || '5000', 10);
+    // reusePort is a Linux/Replit affordance; it throws ENOTSUP on macOS.
     server.listen({
       port,
       host: "0.0.0.0",
-      reusePort: true,
+      ...(process.platform === "linux" ? { reusePort: true } : {}),
     }, () => {
       log(`serving on port ${port}`);
-      // Evergreen maintenance: periodically re-verify stale/flagged email
-      // deliverability in bounded batches. Started after the server is
-      // listening so it never delays boot.
+      // Started after the server is listening so it never delays boot.
       startReverifyScheduler();
     });
   } catch (error) {

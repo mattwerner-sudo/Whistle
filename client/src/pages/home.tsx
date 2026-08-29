@@ -152,20 +152,20 @@ export default function Home() {
             </Link>
           </Card>
 
-          <Card className="hover-elevate cursor-pointer" data-testid="card-action-signals">
-            <Link href="/signals">
+          <Card className="hover-elevate cursor-pointer" data-testid="card-action-extract">
+            <Link href="/schools">
               <CardHeader>
                 <div className="h-12 w-12 rounded-lg bg-blue-500/10 flex items-center justify-center mb-2">
                   <Database className="h-6 w-6 text-blue-500" />
                 </div>
-                <CardTitle className="text-lg">Signal Feed</CardTitle>
+                <CardTitle className="text-lg">Extract Data</CardTitle>
                 <CardDescription>
-                  Track new hires, departures, and tech changes at target schools
+                  Run AI-powered extraction on athletic department directories
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-0">
                 <div className="flex items-center text-sm text-blue-600">
-                  View signals <ArrowRight className="h-4 w-4 ml-1" />
+                  Start extraction <ArrowRight className="h-4 w-4 ml-1" />
                 </div>
               </CardContent>
             </Link>
@@ -186,6 +186,20 @@ export default function Home() {
                   <Target className="h-4 w-4" />
                   ABM List Matcher
                   <Badge variant="secondary" className="ml-auto">CSV Import</Badge>
+                </Button>
+              </Link>
+              <Link href="/growth">
+                <Button variant="outline" className="w-full justify-start gap-3" data-testid="button-growth-tools">
+                  <TrendingUp className="h-4 w-4" />
+                  Growth Tools
+                  <Badge variant="secondary" className="ml-auto">New Hires</Badge>
+                </Button>
+              </Link>
+              <Link href="/reports">
+                <Button variant="outline" className="w-full justify-start gap-3" data-testid="button-reports">
+                  <BarChart3 className="h-4 w-4" />
+                  Usage Reports
+                  <Badge variant="secondary" className="ml-auto">Analytics</Badge>
                 </Button>
               </Link>
             </CardContent>

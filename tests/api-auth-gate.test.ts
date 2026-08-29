@@ -1,4 +1,7 @@
-const BASE = "http://localhost:5000";
+// Port 5000 is occupied by macOS Control Center (AirPlay Receiver) on this
+// machine, so the dev server defaults to 5001 (see server/index.ts). Respect
+// PORT/APP_URL rather than hardcoding the Replit-era default.
+const BASE = process.env.APP_URL?.replace(/\/$/, "") || `http://localhost:${process.env.PORT || 5000}`;
 
 async function status(path: string, headers: Record<string, string> = {}): Promise<number> {
   const res = await fetch(`${BASE}${path}`, { headers });
@@ -16,7 +19,6 @@ function assertEq(actual: number, expected: number, label: string) {
 
 async function main() {
   const protectedPaths = [
-    "/api/staff/schools",
     "/api/staff/stats",
     "/api/lists",
     "/api/credits",
@@ -35,6 +37,10 @@ async function main() {
   const publicPaths: [string, number][] = [
     ["/api/billing/plans", 200],
     ["/api/v1/schools", 401], // its own API-key auth, not a session 401 from the gate
+    // School directory metadata only (name/division/conference) — no staff
+    // contact data, so this is an intentionally public browse surface.
+    // Compare /api/staff/members, which does carry contact data and is gated.
+    ["/api/staff/schools", 200],
   ];
   for (const [p, expected] of publicPaths) {
     assertEq(await status(p), expected, `public/self-auth ${p}`);

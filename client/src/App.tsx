@@ -1,5 +1,4 @@
 import { Switch, Route, Link, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -18,16 +17,19 @@ import {
   SidebarTrigger,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import {
-  Home, Users, Building2, Target, Database, Sparkles, Zap, Activity, Heart,
-  FolderOpen, Settings as SettingsIcon
+import { 
+  Home, Users, Building2, Target, TrendingUp, 
+  BarChart3, Database, Sparkles, FolderOpen, Zap, Activity, Heart, Linkedin, Settings as SettingsIcon
 } from "lucide-react";
 import HomePage from "@/pages/home";
 import StaffDirectory from "@/pages/staff-directory";
+import Reports from "@/pages/reports";
 import ListMatcher from "@/pages/list-matcher";
+import GrowthTools from "@/pages/growth-tools";
 import AccountPlan from "@/pages/account-plan";
 import Jobs from "@/pages/jobs";
 import Signals from "@/pages/signals";
+import WhistleConnect from "@/pages/whistle-connect";
 import ScraperHealth from "@/pages/scraper-health";
 import DataHealth from "@/pages/data-health";
 import NotFound from "@/pages/not-found";
@@ -43,35 +45,24 @@ import PrivacyPage from "@/pages/privacy";
 import VerificationBanner from "@/components/verification-banner";
 import { GlobalPaymentFailureDialog } from "@/components/payment-failure-dialog";
 
-interface MeResponse {
-  user?: { id: number; email: string; role?: string } | null;
-}
-
-function useIsAdmin() {
-  const { data } = useQuery<MeResponse>({ queryKey: ["/api/auth/me"] });
-  return data?.user?.role === "admin";
-}
-
 const navItems = [
   { title: "Dashboard", url: "/dashboard", icon: Home },
   { title: "Staff Directory", url: "/staff", icon: Users },
   { title: "Browse Schools", url: "/schools", icon: Building2 },
+  { title: "Jobs", url: "/jobs", icon: FolderOpen },
 ];
 
 const toolsItems = [
   { title: "Signal Feed", url: "/signals", icon: Zap },
   { title: "ABM List Matcher", url: "/list-matcher", icon: Target },
-];
-
-const adminItems = [
-  { title: "Jobs", url: "/jobs", icon: FolderOpen },
+  { title: "Growth Tools", url: "/growth", icon: TrendingUp },
+  { title: "Reports", url: "/reports", icon: BarChart3 },
   { title: "Data Health", url: "/data-health", icon: Heart },
   { title: "Scraper Health", url: "/scraper-health", icon: Activity },
 ];
 
 function AppSidebar() {
   const [location] = useLocation();
-  const isAdmin = useIsAdmin();
 
   return (
     <Sidebar>
@@ -131,33 +122,21 @@ function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {isAdmin && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Admin</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {adminItems.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={location === item.url}
-                    >
-                      <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-
         <SidebarGroup>
           <SidebarGroupLabel>Settings</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location.startsWith('/settings/whistle-connect') || location === '/whistle-connect'}
+                >
+                  <Link href="/settings/whistle-connect" data-testid="link-nav-settings-whistle-connect">
+                    <Linkedin className="h-4 w-4" />
+                    <span>Whistle Connect</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
@@ -176,7 +155,7 @@ function AppSidebar() {
       <SidebarFooter className="p-4 border-t">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Sparkles className="h-3 w-3" />
-          <span>Verified Contact Data</span>
+          <span>AI-Powered Extraction</span>
         </div>
       </SidebarFooter>
     </Sidebar>
@@ -184,20 +163,23 @@ function AppSidebar() {
 }
 
 function AppRouter() {
-  const isAdmin = useIsAdmin();
   return (
     <Switch>
       <Route path="/dashboard" component={HomePage} />
       <Route path="/staff" component={StaffDirectory} />
       <Route path="/schools" component={StaffDirectory} />
+      <Route path="/jobs" component={Jobs} />
+      <Route path="/reports" component={Reports} />
       <Route path="/signals" component={Signals} />
+      <Route path="/settings/whistle-connect" component={WhistleConnect} />
       <Route path="/settings/billing" component={Billing} />
-      <Route path="/settings" component={Billing} />
+      <Route path="/settings" component={WhistleConnect} />
+      <Route path="/whistle-connect" component={WhistleConnect} />
+      <Route path="/scraper-health" component={ScraperHealth} />
+      <Route path="/data-health" component={DataHealth} />
       <Route path="/list-matcher" component={ListMatcher} />
+      <Route path="/growth" component={GrowthTools} />
       <Route path="/account/:schoolId" component={AccountPlan} />
-      {isAdmin && <Route path="/jobs" component={Jobs} />}
-      {isAdmin && <Route path="/scraper-health" component={ScraperHealth} />}
-      {isAdmin && <Route path="/data-health" component={DataHealth} />}
       <Route component={NotFound} />
     </Switch>
   );

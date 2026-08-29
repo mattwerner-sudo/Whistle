@@ -4,8 +4,11 @@ import { extractStaffFromUrl, convertToStaffMembers, discoverDirectoryUrl, parse
 import type { StaffMember, InsertStaffMember, SchoolExtractionMeta } from "@shared/schema";
 import { broadcastJobUpdate } from "./websocket";
 import { detectTechStack } from "./tech-stack-detector";
-import { getBuyingWindowStatus } from "./ai-extractor";
-import { detectTechChanges, createNewHireSignal, createDepartureSignal } from "./graph-engine";
+import { getBuyingWindowStatus, inferEmailFromPattern } from "./ai-extractor";
+import { detectTechChanges, createNewHireSignal, createDepartureSignal, createTitleChangeSignal } from "./graph-engine";
+import { db } from "../db";
+import { careerHistory, staffMembers, extractionJobs } from "@shared/schema";
+import { eq, and } from "drizzle-orm";
 import { 
   isParserDisabled, 
   recordParserSuccess, 
@@ -253,6 +256,39 @@ export function queueJob(jobId: number): void {
   });
 }
 
+/**
+ * Startup recovery: the queue (activeJobs, pLimit) lives in memory, so a crash
+ * or deploy mid-scrape leaves extraction_jobs rows stuck at "processing" and
+ * nothing ever re-queues "pending" ones. Call once on boot: interrupted jobs
+ * are reset to pending, then everything pending is re-queued.
+ */
+export async function recoverInterruptedJobs(): Promise<void> {
+  try {
+    const orphaned = await db
+      .update(extractionJobs)
+      .set({ status: "pending" })
+      .where(eq(extractionJobs.status, "processing"))
+      .returning({ id: extractionJobs.id });
+    if (orphaned.length > 0) {
+      console.log(`[JobQueue] Reset ${orphaned.length} job(s) interrupted by the last shutdown`);
+    }
+
+    const pending = await db
+      .select({ id: extractionJobs.id })
+      .from(extractionJobs)
+      .where(eq(extractionJobs.status, "pending"))
+      .orderBy(extractionJobs.id)
+      .limit(100);
+    for (const row of pending) queueJob(row.id);
+    if (pending.length > 0) {
+      console.log(`[JobQueue] Re-queued ${pending.length} pending job(s) on startup`);
+    }
+  } catch (err) {
+    // Recovery must never prevent the server from starting.
+    console.error("[JobQueue] Startup recovery failed:", err);
+  }
+}
+
 async function processExtractionJob(jobId: number): Promise<void> {
   const job = await storage.getExtractionJob(jobId);
   if (!job || job.status === 'completed') {
@@ -470,7 +506,7 @@ async function processExtractionJob(jobId: number): Promise<void> {
         }
 
         recordParserSuccess(parserName, result.contacts.length, extractionTime);
-        const members = await convertToStaffMembers(result.contacts, schoolId);
+        const members = convertToStaffMembers(result.contacts, schoolId);
         
         const changes = await detectStaffChanges(schoolId, members);
         if (changes.length > 0) {
@@ -490,6 +526,31 @@ async function processExtractionJob(jobId: number): Promise<void> {
                   schoolId,
                   directory.schoolName
                 );
+                // Populate career history: look for this person at another school
+                if (change.email) {
+                  const previousRecord = await db
+                    .select()
+                    .from(staffMembers)
+                    .where(eq(staffMembers.email, change.email.toLowerCase()))
+                    .limit(5);
+                  const prevAtOtherSchool = previousRecord.find(r => r.schoolId !== schoolId);
+                  if (prevAtOtherSchool) {
+                    // Avoid duplicate career history rows
+                    const existing = await db
+                      .select({ id: careerHistory.id })
+                      .from(careerHistory)
+                      .where(and(eq(careerHistory.staffId, change.staffId || 0), eq(careerHistory.schoolId, prevAtOtherSchool.schoolId)))
+                      .limit(1);
+                    if (!existing.length) {
+                      await db.insert(careerHistory).values({
+                        staffId: change.staffId || 0,
+                        schoolId: prevAtOtherSchool.schoolId,
+                        title: prevAtOtherSchool.title ?? null,
+                        endYear: new Date().getFullYear(),
+                      });
+                    }
+                  }
+                }
               } else if (change.type === 'departure') {
                 await createDepartureSignal(
                   change.staffId || 0,
@@ -497,6 +558,31 @@ async function processExtractionJob(jobId: number): Promise<void> {
                   change.oldValue || null,
                   schoolId,
                   directory.schoolName
+                );
+                // Populate career history for this departure
+                if (change.staffId) {
+                  const existingHist = await db
+                    .select({ id: careerHistory.id })
+                    .from(careerHistory)
+                    .where(and(eq(careerHistory.staffId, change.staffId), eq(careerHistory.schoolId, schoolId)))
+                    .limit(1);
+                  if (!existingHist.length) {
+                    await db.insert(careerHistory).values({
+                      staffId: change.staffId,
+                      schoolId,
+                      title: change.oldValue ?? null,
+                      endYear: new Date().getFullYear(),
+                    });
+                  }
+                }
+              } else if (change.type === 'title_change') {
+                await createTitleChangeSignal(
+                  change.staffId || 0,
+                  change.name,
+                  schoolId,
+                  directory.schoolName,
+                  change.oldValue || 'Unknown',
+                  change.newValue || 'Unknown',
                 );
               }
             } catch (signalErr) {
@@ -506,7 +592,23 @@ async function processExtractionJob(jobId: number): Promise<void> {
         }
         
         await storage.bulkUpsertStaffMembers(members);
-        
+
+        // Fire-and-forget: infer missing emails for staff without an email address
+        const confirmedEmails = members.filter((m) => m.email && m.emailConfidence !== 'inferred').map((m) => m.email as string);
+        if (confirmedEmails.length >= 2) {
+          const noEmailMembers = members.filter((m) => !m.email && m.name);
+          for (const member of noEmailMembers.slice(0, 5)) {
+            inferEmailFromPattern(member.name!, schoolId, confirmedEmails).then(async (inferred) => {
+              if (!inferred) return;
+              const [existing] = await db.select({ id: staffMembers.id, email: staffMembers.email })
+                .from(staffMembers).where(and(eq(staffMembers.schoolId, schoolId), eq(staffMembers.name, member.name!))).limit(1);
+              if (existing && !existing.email) {
+                await db.update(staffMembers).set({ email: inferred, emailConfidence: 'inferred' }).where(eq(staffMembers.id, existing.id));
+              }
+            }).catch(() => {});
+          }
+        }
+
         let techStack: string[] | undefined;
         if (result.html) {
           const techResult = detectTechStack(result.html);
