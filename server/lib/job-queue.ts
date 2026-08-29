@@ -230,7 +230,15 @@ async function logChangesToDatabase(schoolId: string, changes: StaffChange[]): P
   }
 }
 
-const limit = pLimit(3);
+// Each concurrent slot can spin up its own full Chromium instance (Playwright
+// fallback). The right number depends entirely on the host's CPU/RAM, which
+// varies a lot between a laptop and a production instance — hardcoding 3
+// caused real, well-resourced sites (confirmed via isolated re-tests: Penn
+// State, Auburn, Brown all succeed cleanly alone) to falsely register as
+// "no_contacts" under concurrent load on a resource-constrained machine.
+// Tune via SCRAPER_CONCURRENCY once real deploy-target specs are known.
+const CONCURRENCY = parseInt(process.env.SCRAPER_CONCURRENCY || "3", 10);
+const limit = pLimit(CONCURRENCY);
 
 const activeJobs = new Set<number>();
 
