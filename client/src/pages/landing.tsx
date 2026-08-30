@@ -1,10 +1,12 @@
+import { useState } from 'react';
 import { Link } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { 
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
   Database, Users, Zap, Download, Mail, Target,
-  Building2, BarChart3, ArrowRight, CheckCircle2
+  Building2, BarChart3, ArrowRight, CheckCircle2, Copy, Check, Terminal
 } from 'lucide-react';
 import LegalFooter from '@/components/legal-footer';
 
@@ -47,6 +49,104 @@ const stats = [
   { value: '3', label: 'College Divisions' },
   { value: '32', label: 'Conferences' },
 ];
+
+// Copy-paste onboarding for the API and MCP surfaces (both already live in
+// this codebase: server/mcp/index.ts and /api/v1 with key auth). Env var
+// names must match what server/mcp/index.ts actually reads.
+const integrationSnippets: { id: string; label: string; language: string; code: string }[] = [
+  {
+    id: 'claude-code',
+    label: 'Claude Code',
+    language: 'bash',
+    code: `git clone https://github.com/mattwerner-sudo/Whistle
+claude mcp add whistle \\
+  --env WHISTLE_API_KEY=sk_live_yourkey \\
+  --env WHISTLE_API_BASE=https://gowhistle.io \\
+  -- npx tsx Whistle/server/mcp/index.ts`,
+  },
+  {
+    id: 'claude-desktop',
+    label: 'Claude Desktop',
+    language: 'json',
+    code: `{
+  "mcpServers": {
+    "whistle": {
+      "command": "npx",
+      "args": ["tsx", "/path/to/Whistle/server/mcp/index.ts"],
+      "env": {
+        "WHISTLE_API_KEY": "sk_live_yourkey",
+        "WHISTLE_API_BASE": "https://gowhistle.io"
+      }
+    }
+  }
+}`,
+  },
+  {
+    id: 'cursor',
+    label: 'Cursor',
+    language: 'json',
+    code: `{
+  "mcpServers": {
+    "whistle": {
+      "command": "npx",
+      "args": ["tsx", "/path/to/Whistle/server/mcp/index.ts"],
+      "env": {
+        "WHISTLE_API_KEY": "sk_live_yourkey",
+        "WHISTLE_API_BASE": "https://gowhistle.io"
+      }
+    }
+  }
+}`,
+  },
+  {
+    id: 'api',
+    label: 'REST API',
+    language: 'bash',
+    code: `# Search staff across every covered school
+curl -H "X-API-Key: sk_live_yourkey" \\
+  "https://gowhistle.io/api/v1/staff?query=ticket+sales"
+
+# Recent hiring signals for a conference
+curl -H "X-API-Key: sk_live_yourkey" \\
+  "https://gowhistle.io/api/v1/signals?type=new_hire"`,
+  },
+];
+
+function IntegrationSnippet({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard can be unavailable (permissions, insecure context); the
+      // text is still selectable by hand.
+    }
+  };
+  return (
+    <div className="relative rounded-lg border bg-zinc-950 dark:bg-zinc-900 text-zinc-100">
+      {/* Positioned wrapper, not the button itself: the theme's .hover-elevate
+          rule forces position:relative on buttons with higher specificity than
+          the `absolute` utility. */}
+      <div className="absolute top-3 right-3">
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={copy}
+          className="gap-1.5 h-8"
+          data-testid="button-copy-snippet"
+        >
+          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          {copied ? 'Copied' : 'Copy code'}
+        </Button>
+      </div>
+      <pre className="overflow-x-auto p-5 pr-32 text-[13px] leading-relaxed font-mono">
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
+}
 
 export default function Landing() {
   return (
@@ -181,30 +281,65 @@ export default function Landing() {
         </div>
       </section>
 
+      <section className="py-24 border-y bg-zinc-950 dark:bg-zinc-900/50 text-zinc-100">
+        <div className="max-w-4xl mx-auto px-6">
+          <div className="text-center mb-12">
+            <Badge variant="secondary" className="mb-4 gap-1.5">
+              <Terminal className="h-3.5 w-3.5" />
+              For developers &amp; AI agents
+            </Badge>
+            <h2 className="text-3xl font-bold mb-4">Plug the database into your stack in seconds</h2>
+            <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
+              Query athletic department staff and hiring signals from Claude, Cursor,
+              or your own code — through our MCP server or REST API.
+            </p>
+          </div>
+
+          <Tabs defaultValue="claude-code">
+            <TabsList className="mb-4 flex-wrap h-auto">
+              {integrationSnippets.map((s) => (
+                <TabsTrigger key={s.id} value={s.id} data-testid={`tab-integration-${s.id}`}>
+                  {s.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            {integrationSnippets.map((s) => (
+              <TabsContent key={s.id} value={s.id}>
+                <IntegrationSnippet code={s.code} />
+              </TabsContent>
+            ))}
+          </Tabs>
+          <p className="text-sm text-zinc-500 mt-4">
+            Generate an API key in Settings once you're signed in. Full endpoint reference at{' '}
+            <a href="/api/docs" className="underline underline-offset-2 hover:text-zinc-300">/api/docs</a>.
+          </p>
+        </div>
+      </section>
+
       <section className="py-24">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold mb-4">Simple Credit-Based Pricing</h2>
+            <h2 className="text-3xl font-bold mb-4">Annual plans for teams of every size</h2>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              Pay only for what you use. 1 credit = 1 exported contact = $1
+              Pro, Team, and Enterprise tiers — every plan starts with a 14-day trial.
             </p>
           </div>
-          
+
           <div className="flex flex-col items-center gap-6">
             <div className="flex flex-wrap justify-center gap-4">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
-                Credits never expire
+                14-day free trial on every plan
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
-                Bulk discounts available
+                Unlimited searching — pay only to reveal contacts
               </div>
             </div>
-            
+
             <Link href="/pricing">
               <Button size="lg" className="gap-2" data-testid="button-pricing-cta">
-                View Credit Packages
+                View Plans
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
