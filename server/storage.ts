@@ -190,6 +190,14 @@ export class DatabaseStorage implements IStorage {
       failureReason: directory.failureReason,
       extractionAttempts: directory.extractionAttempts ?? 0,
       lastSuccessfulMethod: directory.lastSuccessfulMethod,
+      // Freshness tracking — job-queue passes these on every successful
+      // extraction, but this column list silently dropped them, leaving
+      // last_extracted_at NULL for every school ever extracted. Spread
+      // conditionally so callers that don't pass them (e.g. seeding) don't
+      // null out an existing timestamp.
+      ...(directory.lastExtractedAt !== undefined ? { lastExtractedAt: directory.lastExtractedAt } : {}),
+      ...(directory.lastAttemptedAt !== undefined ? { lastAttemptedAt: directory.lastAttemptedAt } : {}),
+      ...(directory.resolvedUrl !== undefined ? { resolvedUrl: directory.resolvedUrl } : {}),
       updatedAt: new Date(),
     };
     const [result] = await db
@@ -214,6 +222,9 @@ export class DatabaseStorage implements IStorage {
           failureReason: directory.failureReason,
           extractionAttempts: directory.extractionAttempts ?? 0,
           lastSuccessfulMethod: directory.lastSuccessfulMethod,
+          ...(directory.lastExtractedAt !== undefined ? { lastExtractedAt: directory.lastExtractedAt } : {}),
+          ...(directory.lastAttemptedAt !== undefined ? { lastAttemptedAt: directory.lastAttemptedAt } : {}),
+          ...(directory.resolvedUrl !== undefined ? { resolvedUrl: directory.resolvedUrl } : {}),
           updatedAt: new Date(),
         },
       })

@@ -13,6 +13,7 @@ import { jobPostings, signals, schoolDirectories } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { dispatchSignalAlerts } from "./alert-subscriptions";
 import { htmlToTextForAI } from "./html-to-text";
+import { categorizePersona } from "./ai-extractor";
 
 let genAI: GoogleGenAI | null = null;
 function getGenAI(): GoogleGenAI | null {
@@ -135,6 +136,8 @@ async function processJobListings(listings: JobListing[], sourceBoard: string): 
       postingUrl,
       sourceBoard,
       postedAt: listing.postedAt ? new Date(listing.postedAt) : null,
+      // Rule-based classification (no AI quota) so the public board can filter by function.
+      functionalArea: categorizePersona(listing.title).area,
     });
 
     const description = `New job posting at ${listing.organization}: ${listing.title}`;

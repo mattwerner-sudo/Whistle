@@ -872,7 +872,10 @@ export const jobPostings = pgTable("job_postings", {
   jobTitle: text("job_title").notNull(),
   department: text("department"),
   postingUrl: text("posting_url").notNull().unique(),
-  sourceBoard: text("source_board"), // 'ncaa_market' | 'teamwork_online' | 'higheredJobs'
+  sourceBoard: text("source_board"),
+  // Classified by function (rule-based, same taxonomy as staff_members.functionalArea)
+  // so the public job board can filter "by what you'll do, not the title".
+  functionalArea: text("functional_area"), // 'ncaa_market' | 'teamwork_online' | 'higheredJobs'
   postedAt: timestamp("posted_at"),
   detectedAt: timestamp("detected_at").defaultNow().notNull(),
   isActive: boolean("is_active").default(true),

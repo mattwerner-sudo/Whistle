@@ -182,6 +182,12 @@ async function initStripe() {
 
     const server = await registerRoutes(app);
 
+    // Public SEO surface (directory, job board, sitemap). Mounted after the
+    // API routes but before the Vite/static catch-all so crawlers get real
+    // server-rendered HTML. No auth, and no contact data in any response.
+    const { default: publicRoutes } = await import("./routes/public");
+    app.use(publicRoutes);
+
     // Health check endpoint for production deployment
     app.get('/health', (_req: Request, res: Response) => {
       res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });

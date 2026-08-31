@@ -2195,6 +2195,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // CRM Coverage Audit: given the schoolIds a user's uploaded account list
+  // matched to (via match-batch), report how their CRM compares to the TAM —
+  // matched coverage, stale matches, and the covered schools they're missing,
+  // grouped by conference. The DataLane "coverage gap" play on existing data.
+  app.post("/api/accounts/coverage-report", requireUser, async (req: UserRequest, res) => {
+    try {
+      const { matchedSchoolIds } = req.body as { matchedSchoolIds?: unknown };
+      if (!Array.isArray(matchedSchoolIds) || !matchedSchoolIds.every((id) => typeof id === "string")) {
+        return res.status(400).json({ error: "matchedSchoolIds must be an array of school id strings" });
+      }
+      const matchedSet = new Set(matchedSchoolIds);
+
+      const covered = await db
+        .select({
+          schoolId: schoolDirectories.schoolId,
+          schoolName: schoolDirectories.schoolFullName,
+          conference: schoolDirectories.conference,
+          contactsCount: schoolDirectories.contactsCount,
+          lastExtractedAt: schoolDirectories.lastExtractedAt,
+        })
+        .from(schoolDirectories)
+        .where(eq(schoolDirectories.status, "success"));
+
+      const staleCutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
+      const matched = covered.filter((s) => matchedSet.has(s.schoolId));
+      // getTime() via new Date(): the driver can hand timestamps back as strings,
+      // and a string < Date comparison silently coerces both to strings.
+      const staleMatched = matched.filter((s) => !s.lastExtractedAt || new Date(s.lastExtractedAt).getTime() < staleCutoff);
+      const gap = covered.filter((s) => !matchedSet.has(s.schoolId));
+
+      const gapByConference: Record<string, { schools: number; contacts: number }> = {};
+      for (const s of gap) {
+        const key = s.conference ?? "Other";
+        gapByConference[key] = gapByConference[key] ?? { schools: 0, contacts: 0 };
+        gapByConference[key].schools++;
+        gapByConference[key].contacts += s.contactsCount ?? 0;
+      }
+
+      res.json({
+        coveredSchools: covered.length,
+        matched: matched.length,
+        coveragePct: covered.length > 0 ? Math.round((matched.length / covered.length) * 100) : 0,
+        staleMatched: staleMatched.length,
+        gapSchools: gap.length,
+        gapContacts: gap.reduce((a, s) => a + (s.contactsCount ?? 0), 0),
+        gapByConference: Object.entries(gapByConference)
+          .map(([conference, v]) => ({ conference, ...v }))
+          .sort((a, b) => b.contacts - a.contacts),
+        gapList: gap.map((s) => ({ schoolId: s.schoolId, schoolName: s.schoolName, conference: s.conference, contacts: s.contactsCount ?? 0 })),
+      });
+    } catch (error: any) {
+      console.error("Coverage report error:", error);
+      res.status(500).json({ error: error.message || "Failed to build coverage report" });
+    }
+  });
+
   // Save alias (learn from user correction)
   app.post("/api/accounts/alias", async (req, res) => {
     try {
