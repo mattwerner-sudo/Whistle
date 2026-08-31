@@ -83,7 +83,6 @@ export default function Billing() {
   }
 
   const { plan, usage } = data;
-  const isPayg = plan.id === 'payg';
   const isPaid = plan.id === 'pro' || plan.id === 'team' || plan.id === 'enterprise';
 
   const includedReveals = plan.includedReveals ?? 0;
@@ -125,7 +124,7 @@ export default function Billing() {
                 </Badge>
               </CardTitle>
               <CardDescription>
-                {isPayg && 'Pay-as-you-go: $0.90 per reveal.'}
+
                 {isPaid && includedReveals > 0 && `${includedReveals} reveals/month included`}
                 {isPaid && plan.overageRateCents != null && `, then ${formatCents(plan.overageRateCents)} each.`}
               </CardDescription>
@@ -160,18 +159,6 @@ export default function Billing() {
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center gap-2">
-              <CreditCard className="h-4 w-4" />
-              PAYG credit balance
-            </CardDescription>
-            <CardTitle className="text-3xl" data-testid="text-credit-balance">{usage.creditsBalance}</CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs text-muted-foreground">
-            1 credit = 1 reveal. Top up at $0.90/each on the pricing page.
-          </CardContent>
-        </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-2">

@@ -25,7 +25,7 @@ interface UserResponse {
 }
 
 interface Tier {
-  id: 'payg' | 'pro' | 'team' | 'enterprise';
+  id: 'pro' | 'team' | 'enterprise';
   name: string;
   priceLabel: string;
   priceCadence?: string;
@@ -33,63 +33,56 @@ interface Tier {
   features: string[];
   cta: string;
   highlight?: boolean;
-  planId?: 'plan_pro' | 'plan_team';
+  planId?: string;
 }
 
+// Annual-only, per the decided pricing model (CLAUDE.md). PAYG was removed
+// from the product; this page previously still advertised it, plus stale
+// monthly prices — the UI had never been reconciled with that decision.
 const TIERS: Tier[] = [
-  {
-    id: 'payg',
-    name: 'Pay-As-You-Go',
-    priceLabel: '$0.90',
-    priceCadence: 'per reveal',
-    description: 'No subscription. Pay per reveal.',
-    features: [
-      'Browse all 1,300+ schools',
-      'Search 19k+ staff names & titles',
-      '$0.90 per contact reveal',
-      'Re-reveal free within 90 days',
-    ],
-    cta: 'Get started',
-  },
   {
     id: 'pro',
     name: 'Pro',
-    priceLabel: '$100',
-    priceCadence: 'per month',
-    description: 'For active sellers and recruiters.',
+    priceLabel: '$2,400',
+    priceCadence: 'per year',
+    description: 'For active sellers and recruiters. 1 seat.',
     features: [
-      '150 reveals/month included',
+      '2,400 reveals/year included',
       '$0.50 per overage reveal',
       'AI email drafting & meeting prep',
       'Whistle Connect LinkedIn sync',
+      '14-day free trial',
     ],
-    cta: 'Subscribe to Pro',
+    cta: 'Start Pro trial',
     highlight: true,
-    planId: 'plan_pro',
+    planId: 'whistle_pro_annual',
   },
   {
     id: 'team',
     name: 'Team',
-    priceLabel: '$400',
-    priceCadence: 'per month',
-    description: 'For high-volume teams.',
+    priceLabel: '$7,200',
+    priceCadence: 'per year',
+    description: 'For high-volume teams. 5 seats.',
     features: [
-      '800 reveals/month included',
-      '$0.40 per overage reveal',
+      '9,600 reveals/year included',
+      '$0.35 per overage reveal',
       'Everything in Pro',
+      '14-day free trial',
     ],
-    cta: 'Subscribe to Team',
-    planId: 'plan_team',
+    cta: 'Start Team trial',
+    planId: 'whistle_team_annual',
   },
   {
     id: 'enterprise',
     name: 'Enterprise',
-    priceLabel: 'Custom',
-    description: 'Custom volume and support.',
+    priceLabel: '$18,000',
+    priceCadence: 'per year',
+    description: 'Unlimited seats for your whole org.',
     features: [
-      'Custom reveal volume',
-      'API access',
-      'Dedicated success manager',
+      '36,000 reveals/year included',
+      '$0.25 per overage reveal',
+      'API & MCP access',
+      'Dedicated support',
     ],
     cta: 'Talk to sales',
   },
@@ -178,11 +171,11 @@ export default function Pricing() {
     queryKey: ['/api/auth/me'],
   });
   const user = userResponse?.user ?? null;
-  const currentTier = user?.subscriptionTier ?? 'payg';
+  const currentTier = user?.subscriptionTier ?? 'free';
   const hasActiveSub = user?.subscriptionStatus === 'active';
 
   const checkoutMutation = useMutation({
-    mutationFn: async (params: { type: 'subscription' | 'credits' | 'payg_setup'; planId?: string; credits?: number }) => {
+    mutationFn: async (params: { type: 'subscription'; planId?: string }) => {
       return await apiRequest('POST', '/api/billing/checkout', params);
     },
     onSuccess: (data) => {
@@ -205,10 +198,6 @@ export default function Pricing() {
     if (tier.id === 'enterprise') return;
     if (!user) {
       window.location.href = '/login';
-      return;
-    }
-    if (tier.id === 'payg') {
-      checkoutMutation.mutate({ type: 'payg_setup' });
       return;
     }
     if (tier.planId) {
@@ -250,10 +239,9 @@ export default function Pricing() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
           {TIERS.map((tier) => {
-            const isCurrent = (tier.id === currentTier && hasActiveSub)
-              || (tier.id === 'payg' && currentTier === 'payg');
+            const isCurrent = tier.id === currentTier && hasActiveSub;
             return (
               <Card
                 key={tier.id}
@@ -281,11 +269,6 @@ export default function Pricing() {
                       <span>{f}</span>
                     </div>
                   ))}
-                  {tier.id === 'payg' && (
-                    <p className="text-xs text-muted-foreground pt-3">
-                      Add a card once, then we charge $0.90 each time you reveal a contact. No subscription, no minimums.
-                    </p>
-                  )}
                 </CardContent>
                 <CardFooter>
                   {tier.id === 'enterprise' ? (
@@ -304,8 +287,6 @@ export default function Pricing() {
                     >
                       {checkoutMutation.isPending ? (
                         <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      ) : tier.id === 'payg' ? (
-                        <CreditCard className="h-4 w-4 mr-2" />
                       ) : (
                         <Zap className="h-4 w-4 mr-2" />
                       )}

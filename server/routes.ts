@@ -719,11 +719,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/seed", requireAdmin, async (req, res) => {
     try {
       const { seedSchools } = await import("@shared/ncaa-seed-data");
-      
-      console.log("Seeding database with Power 5 schools...");
-      
+
+      console.log("Seeding database with school directory...");
+
+      // Seed is add-only: upserting existing rows used to force status back
+      // to "pending", which knocked every extracted school out of the public
+      // directory and all status-filtered queries (live incident 2026-08-31).
+      const existing = await db.select({ schoolId: schoolDirectories.schoolId }).from(schoolDirectories);
+      const existingIds = new Set(existing.map((e) => e.schoolId));
+
       let count = 0;
+      let skipped = 0;
       for (const school of seedSchools) {
+        if (existingIds.has(school.schoolId)) { skipped++; continue; }
         await storage.upsertSchoolDirectory({
           ...school,
           status: "pending",
@@ -731,6 +739,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         count++;
       }
+      console.log(`Seed: ${count} new, ${skipped} existing skipped`);
       
       // Log seed event
       await logUsageEvent(req, 'init', undefined, undefined, { type: 'seed', count });
