@@ -872,7 +872,10 @@ export const jobPostings = pgTable("job_postings", {
   jobTitle: text("job_title").notNull(),
   department: text("department"),
   postingUrl: text("posting_url").notNull().unique(),
-  sourceBoard: text("source_board"), // 'ncaa_market' | 'teamwork_online' | 'higheredJobs'
+  sourceBoard: text("source_board"),
+  // Classified by function (rule-based, same taxonomy as staff_members.functionalArea)
+  // so the public job board can filter "by what you'll do, not the title".
+  functionalArea: text("functional_area"), // 'ncaa_market' | 'teamwork_online' | 'higheredJobs'
   postedAt: timestamp("posted_at"),
   detectedAt: timestamp("detected_at").defaultNow().notNull(),
   isActive: boolean("is_active").default(true),
@@ -903,6 +906,20 @@ export type NilCollective = typeof nilCollectives.$inferSelect;
 // ============================================================================
 // ORGANIZATIONS - Multi-seat team billing
 // ============================================================================
+
+// Data-subject removal requests from the public /remove-my-info page.
+// The email doubles as a permanent suppression list: matching staff rows are
+// deleted on request, and ingest checks this table so a re-scrape can never
+// silently re-add someone who asked to be removed.
+export const optOutRequests = pgTable("opt_out_requests", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  name: text("name"),
+  details: text("details"),
+  status: text("status").notNull().default("received"), // 'received' | 'processed'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  processedAt: timestamp("processed_at"),
+});
 
 export const organizations = pgTable("organizations", {
   id: serial("id").primaryKey(),

@@ -58,6 +58,17 @@ function detectSchoolColumn(headers: string[]): string | null {
   return null;
 }
 
+interface CoverageReport {
+  coveredSchools: number;
+  matched: number;
+  coveragePct: number;
+  staleMatched: number;
+  gapSchools: number;
+  gapContacts: number;
+  gapByConference: { conference: string; schools: number; contacts: number }[];
+  gapList: { schoolId: string; schoolName: string; conference: string | null; contacts: number }[];
+}
+
 interface EnrichedContact {
   id: number;
   name: string;
@@ -85,6 +96,8 @@ export default function ListMatcher() {
   // Enrichment Module State
   const [viewState, setViewState] = useState<'matching' | 'contacts'>('matching');
   const [enrichedContacts, setEnrichedContacts] = useState<EnrichedContact[]>([]);
+  const [coverage, setCoverage] = useState<CoverageReport | null>(null);
+  const [coverageLoading, setCoverageLoading] = useState(false);
 
   const parseCSV = useCallback((file: File) => {
     setFileName(file.name);
@@ -243,6 +256,42 @@ export default function ListMatcher() {
         toast({ title: 'Error', description: e.message || 'Failed to save alias', variant: 'destructive' });
       }
     }
+  };
+
+  const handleCoverageReport = async () => {
+    const matchedSchoolIds = Array.from(new Set(
+      results
+        .map((r) => r.userSelectedSchoolId ?? r.schoolId)
+        .filter((id): id is string => !!id),
+    ));
+    if (matchedSchoolIds.length === 0) return;
+    setCoverageLoading(true);
+    try {
+      const report = await apiRequest<CoverageReport>('POST', '/api/accounts/coverage-report', { matchedSchoolIds });
+      setCoverage(report);
+    } catch (err) {
+      console.error('Coverage report failed:', err);
+    } finally {
+      setCoverageLoading(false);
+    }
+  };
+
+  const handleExportCoverage = () => {
+    if (!coverage) return;
+    const header = 'School,Conference,Contacts Available';
+    const rows = coverage.gapList.map((g) =>
+      [g.schoolName, g.conference ?? '', g.contacts].map((v) => {
+        const s = String(v ?? '');
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      }).join(','),
+    );
+    const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'whistle-coverage-gap.csv';
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleExportMatched = () => {
@@ -552,6 +601,60 @@ export default function ListMatcher() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {summary && summary.matched > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
+            <CardTitle>Coverage Audit</CardTitle>
+            <div className="flex gap-2">
+              {coverage && (
+                <Button variant="outline" size="sm" onClick={handleExportCoverage} data-testid="button-export-coverage">
+                  Export Gap CSV
+                </Button>
+              )}
+              <Button size="sm" onClick={handleCoverageReport} disabled={coverageLoading} data-testid="button-coverage-report">
+                {coverageLoading ? 'Analyzing…' : coverage ? 'Refresh' : 'Compare to TAM'}
+              </Button>
+            </div>
+          </CardHeader>
+          {coverage && (
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">TAM coverage</p>
+                  <p className="text-2xl font-bold" data-testid="text-coverage-pct">{coverage.coveragePct}%</p>
+                  <p className="text-xs text-muted-foreground">{coverage.matched} of {coverage.coveredSchools} covered schools</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Stale in your list</p>
+                  <p className="text-2xl font-bold text-yellow-500">{coverage.staleMatched}</p>
+                  <p className="text-xs text-muted-foreground">no refresh in 90+ days</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Schools you're missing</p>
+                  <p className="text-2xl font-bold text-primary">{coverage.gapSchools}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Contacts in the gap</p>
+                  <p className="text-2xl font-bold text-primary">{coverage.gapContacts.toLocaleString()}</p>
+                </div>
+              </div>
+              {coverage.gapByConference.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium mb-2">Biggest gaps by conference</p>
+                  <div className="flex flex-wrap gap-2">
+                    {coverage.gapByConference.slice(0, 8).map((g) => (
+                      <span key={g.conference} className="text-xs bg-muted rounded-full px-3 py-1">
+                        {g.conference}: {g.schools} schools · {g.contacts.toLocaleString()} contacts
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          )}
+        </Card>
       )}
 
       {results.length > 0 && (

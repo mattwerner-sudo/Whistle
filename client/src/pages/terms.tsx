@@ -48,10 +48,10 @@ export default function TermsPage() {
           <section>
             <h2 className="text-xl font-semibold">4. Billing & Reveals</h2>
             <p>
-              Plans, included reveals, overage rates, and pay-as-you-go pricing are described on our
+              Plans, included reveals, and overage rates are described on our
               <Link href="/pricing" className="underline"> pricing page</Link>. By providing a payment
               method you authorize Whistle (through Stripe) to charge that method for the plan you
-              select, any overage reveals, and any pay-as-you-go reveals you initiate. Subscriptions
+              select and any overage reveals. Subscriptions
               renew automatically until canceled. You can update or remove your payment method, change
               plans, and cancel at any time from your billing dashboard.
             </p>
@@ -65,15 +65,38 @@ export default function TermsPage() {
             <h2 className="text-xl font-semibold">5. Acceptable Use</h2>
             <p>You agree not to:</p>
             <ul className="list-disc pl-6 space-y-1">
-              <li>scrape, resell, or redistribute Whistle data in bulk;</li>
+              <li>scrape, resell, redistribute, or sublicense Whistle data, in bulk or otherwise, or incorporate it into any product or dataset made available to third parties;</li>
+              <li>
+                use Whistle data for any purpose regulated by the Fair Credit Reporting Act (FCRA) —
+                including determining eligibility for employment, credit, insurance, housing, or any
+                other purpose that would make Whistle a consumer reporting agency. Whistle is a
+                sales-and-marketing intelligence tool only and provides no FCRA-compliant data;
+              </li>
               <li>use Whistle to send unsolicited bulk email in violation of CAN-SPAM, CASL, or similar laws;</li>
               <li>attempt to reverse engineer, probe, or disrupt the Service;</li>
               <li>use Whistle for anything other than lawful B2B outreach.</li>
             </ul>
+            <p>
+              We may suspend or terminate accounts that violate these restrictions.
+            </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold">6. Termination</h2>
+            <h2 className="text-xl font-semibold">6. Data Sources & Removal</h2>
+            <p>
+              Whistle's contact data is gathered from publicly accessible sources — primarily official
+              staff directories published by universities themselves — and is annotated with its
+              extraction date and confidence. Individuals who appear in Whistle's database may request
+              removal at any time via our
+              <a href="/remove-my-info" className="underline"> removal page</a>. Removal requests are
+              processed automatically: matching records are deleted and the address is permanently
+              suppressed from future collection. If you receive a removal request from a contact you
+              obtained through Whistle, you are responsible for honoring it in your own systems.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold">7. Termination</h2>
             <p>
               We may suspend or terminate your account for breach of these terms, non-payment, or any
               activity that exposes Whistle or its users to risk. You may delete your account at any
@@ -82,7 +105,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold">7. Disclaimers</h2>
+            <h2 className="text-xl font-semibold">8. Disclaimers</h2>
             <p>
               The Service is provided “as is.” While we work hard to keep our data fresh and accurate,
               Whistle does not warrant that the data is complete, current, or error-free. You are
@@ -91,7 +114,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold">8. Limitation of Liability</h2>
+            <h2 className="text-xl font-semibold">9. Limitation of Liability</h2>
             <p>
               To the maximum extent permitted by law, Whistle’s aggregate liability for any claim arising
               out of or relating to the Service will not exceed the amount you paid Whistle in the
@@ -100,7 +123,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold">9. Changes</h2>
+            <h2 className="text-xl font-semibold">10. Changes</h2>
             <p>
               We may update these terms from time to time. If we make a material change, we will notify
               active users by email or in-product banner before the change takes effect.
@@ -108,7 +131,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold">10. Contact</h2>
+            <h2 className="text-xl font-semibold">11. Contact</h2>
             <p>
               Questions? Email <a href="mailto:support@whistle.app" className="underline">support@whistle.app</a>.
             </p>

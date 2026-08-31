@@ -1,6 +1,7 @@
 import { 
   schoolDirectories, 
   staffMembers,
+  optOutRequests,
   usageEvents,
   extractionJobs, 
   staffChangeLogs,
@@ -26,7 +27,7 @@ import {
   type ChangeType
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, ilike, or, and, sql, desc, asc, gte, lte, isNull, isNotNull, lt } from "drizzle-orm";
+import { eq, ilike, or, and, sql, desc, asc, gte, lte, isNull, isNotNull, lt, inArray } from "drizzle-orm";
 import { createHash } from "crypto";
 import { nameSimilarity as nameSimilarityFn } from "./staffExtractor";
 
@@ -190,6 +191,14 @@ export class DatabaseStorage implements IStorage {
       failureReason: directory.failureReason,
       extractionAttempts: directory.extractionAttempts ?? 0,
       lastSuccessfulMethod: directory.lastSuccessfulMethod,
+      // Freshness tracking — job-queue passes these on every successful
+      // extraction, but this column list silently dropped them, leaving
+      // last_extracted_at NULL for every school ever extracted. Spread
+      // conditionally so callers that don't pass them (e.g. seeding) don't
+      // null out an existing timestamp.
+      ...(directory.lastExtractedAt !== undefined ? { lastExtractedAt: directory.lastExtractedAt } : {}),
+      ...(directory.lastAttemptedAt !== undefined ? { lastAttemptedAt: directory.lastAttemptedAt } : {}),
+      ...(directory.resolvedUrl !== undefined ? { resolvedUrl: directory.resolvedUrl } : {}),
       updatedAt: new Date(),
     };
     const [result] = await db
@@ -214,6 +223,9 @@ export class DatabaseStorage implements IStorage {
           failureReason: directory.failureReason,
           extractionAttempts: directory.extractionAttempts ?? 0,
           lastSuccessfulMethod: directory.lastSuccessfulMethod,
+          ...(directory.lastExtractedAt !== undefined ? { lastExtractedAt: directory.lastExtractedAt } : {}),
+          ...(directory.lastAttemptedAt !== undefined ? { lastAttemptedAt: directory.lastAttemptedAt } : {}),
+          ...(directory.resolvedUrl !== undefined ? { resolvedUrl: directory.resolvedUrl } : {}),
           updatedAt: new Date(),
         },
       })
@@ -487,10 +499,27 @@ export class DatabaseStorage implements IStorage {
 
   async bulkUpsertStaffMembers(members: InsertStaffMember[]): Promise<void> {
     if (members.length === 0) return;
-    
+
+    // Honor the opt-out suppression list at ingest: a person who requested
+    // removal via /remove-my-info must never be silently re-added by a
+    // re-scrape. One query per bulk call, matched case-insensitively.
+    const emails = members.map((m) => m.email?.toLowerCase()).filter(Boolean) as string[];
+    let suppressed = new Set<string>();
+    if (emails.length > 0) {
+      const rows = await db
+        .select({ email: optOutRequests.email })
+        .from(optOutRequests)
+        .where(inArray(optOutRequests.email, emails));
+      suppressed = new Set(rows.map((r) => r.email));
+    }
+    const allowed = members.filter((m) => !m.email || !suppressed.has(m.email.toLowerCase()));
+    if (allowed.length < members.length) {
+      console.log(`[OptOut] Skipped ${members.length - allowed.length} suppressed contact(s) during ingest`);
+    }
+
     const batchSize = 50;
-    for (let i = 0; i < members.length; i += batchSize) {
-      const batch = members.slice(i, i + batchSize);
+    for (let i = 0; i < allowed.length; i += batchSize) {
+      const batch = allowed.slice(i, i + batchSize);
       for (const member of batch) {
         await this.upsertStaffMember(member);
       }
