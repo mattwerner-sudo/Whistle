@@ -11,10 +11,19 @@
  *   npx tsx scripts/export-list.ts --titles "director" --conference SEC --limit 500
  *   npx tsx scripts/export-list.ts --persona signer,champion --out signers.csv
  *   npx tsx scripts/export-list.ts --titles "ticket" --sample     # 5-row teaser
+ *   npx tsx scripts/export-list.ts --titles "ticket" --fields core          # à la carte tiers
+ *
+ * --fields controls which column groups ship (the published /data menu):
+ *   core     name, title, school, conference, verified email  (custom slice / conference)
+ *   contacts core + phone, department, persona, confidence     (full-database tier)
+ *   all      contacts + recent signals per school              (everything tier; default)
+ * Every export includes a stable "Whistle ID" per contact for CRM import/dedupe.
  */
 import "dotenv/config";
 import { writeFileSync } from "fs";
 import { Pool } from "pg";
+
+type FieldTier = "core" | "contacts" | "all";
 
 interface Args {
   titles: string[];
@@ -23,6 +32,7 @@ interface Args {
   limit: number;
   out: string;
   sample: boolean;
+  fields: FieldTier;
 }
 
 function parseArgs(): Args {
@@ -32,6 +42,8 @@ function parseArgs(): Args {
     return i >= 0 && argv[i + 1] ? argv[i + 1] : null;
   };
   const sample = argv.includes("--sample");
+  const fieldsRaw = (get("--fields") ?? "all").toLowerCase();
+  const fields: FieldTier = fieldsRaw === "core" || fieldsRaw === "contacts" ? fieldsRaw : "all";
   return {
     titles: (get("--titles") ?? "").split(",").map((s) => s.trim()).filter(Boolean),
     conference: get("--conference"),
@@ -39,6 +51,7 @@ function parseArgs(): Args {
     limit: sample ? 5 : parseInt(get("--limit") ?? "10000", 10),
     out: get("--out") ?? (sample ? "sample.csv" : "export.csv"),
     sample,
+    fields,
   };
 }
 
@@ -78,6 +91,7 @@ async function main() {
 
   const sql = `
     select
+      s.id as whistle_id,
       s.name,
       s.title,
       s.email,
@@ -109,19 +123,38 @@ async function main() {
   const res = await pool.query(sql, params);
   await pool.end();
 
-  const headers = [
-    "Name", "Title", "Email", "Phone", "Department", "School", "Conference",
-    "Buyer Persona", "Email Confidence", "Overall Confidence", "Extracted On",
-    "Recent School Signals",
+  // Column groups by tier — mirrors the published /data menu. "Whistle ID"
+  // is always first: a stable per-contact key for CRM import and dedupe
+  // across refresh deliveries.
+  type Col = { header: string; value: (r: any) => unknown };
+  const coreCols: Col[] = [
+    { header: "Whistle ID", value: (r) => r.whistle_id },
+    { header: "Name", value: (r) => r.name },
+    { header: "Title", value: (r) => r.title },
+    { header: "School", value: (r) => r.school },
+    { header: "Conference", value: (r) => r.conference },
+    { header: "Email", value: (r) => r.email },
+    { header: "Email Confidence", value: (r) => r.email_confidence ?? "extracted" },
+    { header: "Extracted On", value: (r) => r.extracted_on?.toISOString?.()?.slice(0, 10) ?? r.extracted_on },
   ];
-  const lines = [headers.join(",")];
+  const contactCols: Col[] = [
+    { header: "Phone", value: (r) => r.phone },
+    { header: "Department", value: (r) => r.department },
+    { header: "Buyer Persona", value: (r) => r.buyer_persona },
+    { header: "Overall Confidence", value: (r) => r.confidence },
+  ];
+  const signalCols: Col[] = [
+    { header: "Recent School Signals", value: (r) => r.recent_school_signals },
+  ];
+  const cols = [
+    ...coreCols,
+    ...(args.fields === "contacts" || args.fields === "all" ? contactCols : []),
+    ...(args.fields === "all" ? signalCols : []),
+  ];
+
+  const lines = [cols.map((c) => c.header).join(",")];
   for (const r of res.rows) {
-    lines.push([
-      r.name, r.title, r.email, r.phone, r.department, r.school, r.conference,
-      r.buyer_persona, r.email_confidence ?? "extracted", r.confidence,
-      r.extracted_on?.toISOString?.()?.slice(0, 10) ?? r.extracted_on,
-      r.recent_school_signals,
-    ].map(csvEscape).join(","));
+    lines.push(cols.map((c) => csvEscape(c.value(r))).join(","));
   }
   writeFileSync(args.out, lines.join("\n") + "\n");
 

@@ -65,7 +65,7 @@ function page(opts: { title: string; description: string; canonicalPath: string;
 </header>
 ${opts.body}
 <footer class="site">
-  Whistle — collegiate athletics sales intelligence · <a href="/directory">Directory</a> · <a href="/jobs-board">Jobs</a> · <a href="/remove-my-info">Remove my info</a> · <a href="/">About</a>
+  Whistle — collegiate athletics sales intelligence · <a href="/directory">Directory</a> · <a href="/jobs-board">Jobs</a> · <a href="/data">Purchase data</a> · <a href="/remove-my-info">Remove my info</a> · <a href="/">About</a>
 </footer>
 </div>
 </body>
@@ -330,6 +330,94 @@ ${rows.map((r) => `<tr>
 });
 
 // ---------------------------------------------------------------------------
+// /data — published data-purchase menu + live freshness audit trail.
+//
+// The BioPharmGuy commercial pattern: transparent à la carte pricing (their
+// differentiator vs. talk-to-sales incumbents) plus a per-field freshness
+// record — except ours is generated live from the pipeline's own timestamps
+// instead of typed by hand. Dataset purchases are deliberately priced so the
+// "everything" bundle sits above the Pro subscription: snapshots don't
+// cannibalize the living platform.
+// ---------------------------------------------------------------------------
+router.get("/data", async (_req, res) => {
+  try {
+    const [staffStats] = await db
+      .select({
+        total: sql<number>`count(*)`,
+        withEmail: sql<number>`count(*) filter (where ${staffMembers.email} <> '')`,
+        verified: sql<number>`count(*) filter (where ${staffMembers.emailVerificationStatus} = 'verified')`,
+        lastVerifyPass: sql<string>`max(${staffMembers.emailVerifiedAt})`,
+        newestExtraction: sql<string>`max(${staffMembers.extractedAt})`,
+      })
+      .from(staffMembers);
+
+    const [schoolStats] = await db
+      .select({
+        covered: sql<number>`count(*) filter (where ${schoolDirectories.status} = 'success')`,
+        oldestRefresh: sql<string>`min(${schoolDirectories.lastExtractedAt}) filter (where ${schoolDirectories.status} = 'success')`,
+        newestRefresh: sql<string>`max(${schoolDirectories.lastExtractedAt}) filter (where ${schoolDirectories.status} = 'success')`,
+      })
+      .from(schoolDirectories);
+
+    const [signalStats] = await db
+      .select({ total: sql<number>`count(*)`, newest: sql<string>`max(${signals.detectedAt})` })
+      .from(signals);
+
+    const d = (v: string | null | undefined) => (v ? new Date(v).toISOString().slice(0, 10) : "—");
+    const n = (v: number | string | null | undefined) => Number(v ?? 0).toLocaleString();
+
+    const body = `
+<h1>Purchase Whistle Data</h1>
+<p class="sub">One-time dataset purchases, delivered as CSV with stable IDs for CRM import. Every price is published — the same for everyone, no demo call required. For continuously refreshed data with hiring alerts, see <a href="/pricing">Whistle plans</a>.</p>
+
+<h2>What's in the database right now</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Metric</th><th class="num">Count</th><th>Last checked</th></tr></thead>
+<tbody>
+<tr><td>Athletic departments covered</td><td class="num">${n(schoolStats?.covered)}</td><td class="muted">oldest directory refresh ${d(schoolStats?.oldestRefresh)}, newest ${d(schoolStats?.newestRefresh)}</td></tr>
+<tr><td>Staff contacts</td><td class="num">${n(staffStats?.total)}</td><td class="muted">newest extraction ${d(staffStats?.newestExtraction)}</td></tr>
+<tr><td>Contacts with email</td><td class="num">${n(staffStats?.withEmail)}</td><td class="muted">${n(staffStats?.verified)} domain-verified, last verification pass ${d(staffStats?.lastVerifyPass)}</td></tr>
+<tr><td>Hiring &amp; change signals</td><td class="num">${n(signalStats?.total)}</td><td class="muted">newest signal ${d(signalStats?.newest)}</td></tr>
+</tbody>
+</table></div>
+<p class="muted">This table is generated live from the production database — the timestamps are the pipeline's own records, not marketing copy. Extraction runs continuously; email deliverability is re-verified on a rolling schedule.</p>
+
+<h2>Pricing</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Product</th><th class="num">Price (USD)</th><th>Includes</th></tr></thead>
+<tbody>
+<tr><td>Custom slice</td><td class="num">$0.12 / contact<br><span class="muted">$249 minimum</span></td><td>Your title keywords &times; conferences. Name, title, school, verified email, phone where published.</td></tr>
+<tr><td>Single conference</td><td class="num">$399</td><td>Every covered school in one conference — full staff contacts.</td></tr>
+<tr><td>Full database — contacts</td><td class="num">$1,995</td><td>Every covered school, every contact, verified emails and phones.</td></tr>
+<tr><td>Everything</td><td class="num">$3,500</td><td>Full contacts plus the signals history (hires, departures, title changes) and detected technology per school.</td></tr>
+<tr><td>Quarterly refresh plan</td><td class="num">40% of purchase / year</td><td>A fully updated copy of your dataset every quarter.</td></tr>
+</tbody>
+</table></div>
+
+<h2>How it works</h2>
+<div class="tablewrap"><table>
+<tbody>
+<tr><td class="muted" style="white-space:nowrap;">01</td><td>Email <a href="mailto:support@whistle.app">support@whistle.app</a> with what you need (titles, conferences, or a bundle above). Include "data purchase" in the subject.</td></tr>
+<tr><td class="muted">02</td><td>We confirm the exact row count and price before you pay — no surprises.</td></tr>
+<tr><td class="muted">03</td><td>Pay by card; your CSV is delivered within 2 business days (usually same-day).</td></tr>
+</tbody>
+</table></div>
+
+<div class="callout">Datasets are point-in-time snapshots licensed for your internal sales and marketing use — no resale or redistribution, and no FCRA-regulated uses (see <a href="/terms">terms</a>). Need the data to stay current on its own, with alerts when your buyers change jobs? That's the <a href="/pricing">Whistle platform</a>.</div>`;
+
+    res.type("html").send(page({
+      title: "Purchase Whistle Data",
+      description: "Transparent, published pricing for one-time college athletics contact datasets — with a live freshness audit trail.",
+      canonicalPath: "/data",
+      body,
+    }));
+  } catch (err) {
+    console.error("[Public] /data error:", err);
+    res.status(500).type("html").send("Something went wrong.");
+  }
+});
+
+// ---------------------------------------------------------------------------
 // /remove-my-info — data-subject opt-out (form + processing)
 //
 // Removal is honored immediately (matching staff rows deleted) and
@@ -425,6 +513,7 @@ router.get("/sitemap.xml", async (_req, res) => {
     const urls = [
       { loc: `${BASE_URL}/directory` },
       { loc: `${BASE_URL}/jobs-board` },
+      { loc: `${BASE_URL}/data` },
       ...conferences.map((c) => ({ loc: `${BASE_URL}/directory/${slugConf(c)}` })),
       ...schools.map((s) => ({
         loc: `${BASE_URL}/directory/school/${encodeURIComponent(s.schoolId)}`,
