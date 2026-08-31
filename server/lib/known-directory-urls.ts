@@ -934,8 +934,8 @@ export const KNOWN_DIRECTORY_URLS: Record<string, DirectoryOverride> = {
     lastVerified: "2025-03-20",
   },
   "morgan-state": {
-    directoryUrl: "https://maborathletics.com/staff-directory",
-    athleticsBaseUrl: "https://maborathletics.com",
+    directoryUrl: "https://morganstatebears.com/staff-directory",
+    athleticsBaseUrl: "https://morganstatebears.com",
     lastVerified: "2025-03-20",
   },
   "norfolk-state": {
@@ -949,13 +949,13 @@ export const KNOWN_DIRECTORY_URLS: Record<string, DirectoryOverride> = {
     lastVerified: "2025-03-20",
   },
   "sc-state": {
-    directoryUrl: "https://scstatebulldogs.com/staff-directory",
-    athleticsBaseUrl: "https://scstatebulldogs.com",
+    directoryUrl: "https://www.scsuathletics.com/staff-directory",
+    athleticsBaseUrl: "https://www.scsuathletics.com",
     lastVerified: "2025-03-20",
   },
   "maryland-eastern-shore": {
-    directoryUrl: "https://umeshawks.com/staff-directory",
-    athleticsBaseUrl: "https://umeshawks.com",
+    directoryUrl: "https://umeshawksports.com/staff-directory",
+    athleticsBaseUrl: "https://umeshawksports.com",
     lastVerified: "2025-03-20",
   },
   "alabama-am": {
@@ -1139,8 +1139,8 @@ export const KNOWN_DIRECTORY_URLS: Record<string, DirectoryOverride> = {
     lastVerified: "2025-03-20",
   },
   "kansas-city": {
-    directoryUrl: "https://umkcroos.com/staff-directory",
-    athleticsBaseUrl: "https://umkcroos.com",
+    directoryUrl: "https://kcroos.com/staff-directory",
+    athleticsBaseUrl: "https://kcroos.com",
     lastVerified: "2025-03-20",
   },
   "north-dakota": {
@@ -1154,8 +1154,8 @@ export const KNOWN_DIRECTORY_URLS: Record<string, DirectoryOverride> = {
     lastVerified: "2025-03-20",
   },
   "oral-roberts": {
-    directoryUrl: "https://orugoldeneagles.com/staff-directory",
-    athleticsBaseUrl: "https://orugoldeneagles.com",
+    directoryUrl: "https://oruathletics.com/staff-directory",
+    athleticsBaseUrl: "https://oruathletics.com",
     lastVerified: "2025-03-20",
   },
   "south-dakota": {

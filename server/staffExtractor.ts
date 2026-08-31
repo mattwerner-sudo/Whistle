@@ -194,6 +194,32 @@ function extractEmailFromElement($: cheerio.CheerioAPI, element: any): string {
   return '';
 }
 
+// Words that make a capitalized phrase a job title or heading, not a person.
+const NON_NAME_WORDS = /\b(coach|director|assistant|associate|coordinator|manager|athletics?|trainer|head|sports?|operations?|academic|senior|deputy|executive|administrative|specialist|analyst|intern|graduate|strength|conditioning|equipment|facilities|marketing|ticket|compliance|communications?|development|media|video|creative|university|college|department|office|staff|directory|phone|email|fax|address|room|suite|hall|building|center|centre)\b/i;
+
+function findPersonNameInContainer($: cheerio.CheerioAPI, $container: any): string | null {
+  const candidates: string[] = [];
+  $container.find('td, th, li, p, div, span, strong, b, a, h1, h2, h3, h4, h5').each((_: number, el: any) => {
+    // ownText only — avoid concatenated parent blobs.
+    const own = $(el).clone().children().remove().end().text().replace(/\s+/g, ' ').trim();
+    if (own) candidates.push(own);
+    const full = $(el).text().replace(/\s+/g, ' ').trim();
+    if (full && full !== own && full.length <= 40) candidates.push(full);
+  });
+
+  for (const raw of candidates) {
+    const text = raw.replace(/Full Bio for/i, '').trim();
+    if (text.length < 5 || text.length > 40) continue;
+    if (text.includes('@') || /\d/.test(text)) continue;
+    if (NON_NAME_WORDS.test(text)) continue;
+    // 2–4 capitalized tokens, allowing initials, apostrophes, hyphens, suffixes.
+    if (!/^[A-Z][A-Za-z'.-]+(\s+[A-Z][A-Za-z'.-]*){1,3}$/.test(text)) continue;
+    if (!isValidPersonName(text)) continue;
+    return text;
+  }
+  return null;
+}
+
 function extractPersonFromContainer($: cheerio.CheerioAPI, container: any): ExtractedContact | null {
   const $container = $(container);
   const textContent = $container.text().replace(/\s+/g, ' ').trim();
@@ -262,6 +288,21 @@ function extractPersonFromContainer($: cheerio.CheerioAPI, container: any): Extr
     }
   }
   
+  if (name === 'Unknown') {
+    // Last structured attempt before the lossy email-derived fallback: scan
+    // the container's own text fragments for something shaped like a person's
+    // name. Table-style directories (UIC, Bethune-Cookman, St. Bonaventure…)
+    // put the name in a plain cell no class selector matches, while the
+    // mailto anchor's text is the address itself — so the chain above misses
+    // and email-derivation produces single-token junk ("Msgiles") that
+    // validation then rejects, zeroing out sites with hundreds of contacts.
+    const found = findPersonNameInContainer($, $container);
+    if (found) {
+      name = found;
+      nameSource = 'container-text';
+    }
+  }
+
   if (name === 'Unknown') {
     name = extractNameFromEmail(email);
     nameSource = 'email-derived';
