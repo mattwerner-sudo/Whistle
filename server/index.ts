@@ -6,7 +6,7 @@ import { runMigrations } from 'stripe-replit-sync';
 import { registerRoutes } from "./routes";
 import { initCron } from "./lib/cron";
 import { startReverifyScheduler } from "./lib/reverify-scheduler";
-import { setupVite, serveStatic, log } from "./vite";
+import { serveStatic, log } from "./static";
 import { pool } from "./db";
 import { getStripeSync } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
@@ -207,6 +207,12 @@ async function initStripe() {
     // setting up all the other routes so the catch-all route
     // doesn't interfere with the other routes
     if (app.get("env") === "development") {
+      // The import path lives in a variable so esbuild cannot statically
+      // analyze it and inline vite.ts into the production bundle — vite is a
+      // devDependency and does not exist in the pruned production image.
+      // In dev, tsx resolves "./vite.js" to server/vite.ts.
+      const devViteModule = "./vite.js";
+      const { setupVite } = await import(devViteModule);
       await setupVite(app, server);
     } else {
       serveStatic(app);
