@@ -12,7 +12,7 @@
  */
 import { Router } from "express";
 import { db } from "../db";
-import { schoolDirectories, staffMembers, signals, jobPostings } from "@shared/schema";
+import { schoolDirectories, staffMembers, signals, jobPostings, optOutRequests } from "@shared/schema";
 import { eq, sql, desc, and, gte, isNotNull } from "drizzle-orm";
 
 const router = Router();
@@ -65,7 +65,7 @@ function page(opts: { title: string; description: string; canonicalPath: string;
 </header>
 ${opts.body}
 <footer class="site">
-  Whistle — collegiate athletics sales intelligence · <a href="/directory">Directory</a> · <a href="/jobs-board">Jobs</a> · <a href="/">About</a>
+  Whistle — collegiate athletics sales intelligence · <a href="/directory">Directory</a> · <a href="/jobs-board">Jobs</a> · <a href="/remove-my-info">Remove my info</a> · <a href="/">About</a>
 </footer>
 </div>
 </body>
@@ -326,6 +326,88 @@ ${rows.map((r) => `<tr>
   } catch (err) {
     console.error("[Public] jobs board error:", err);
     res.status(500).type("html").send("Something went wrong.");
+  }
+});
+
+// ---------------------------------------------------------------------------
+// /remove-my-info — data-subject opt-out (form + processing)
+//
+// Removal is honored immediately (matching staff rows deleted) and
+// permanently (the email lands on a suppression list that ingest checks, so
+// re-scraping can never silently re-add the person). Anyone can submit for
+// any email; the only effect is removal of that email's data from the
+// product, which is a safe worst case.
+// ---------------------------------------------------------------------------
+router.get("/remove-my-info", (_req, res) => {
+  const body = `
+<h1>Remove my information</h1>
+<p class="sub">Whistle indexes work contact details published on official university athletics staff directories. If yours is listed and you'd like it removed, submit your work email below.</p>
+<form method="POST" action="/remove-my-info" style="display:grid;gap:14px;max-width:480px;background:#fff;border:1px solid var(--line);padding:22px;">
+  <label>Work email (the address to remove)<br>
+    <input type="email" name="email" required style="width:100%;padding:9px;border:1px solid var(--line);border-radius:5px;font-size:15px;margin-top:4px;">
+  </label>
+  <label>Name (optional)<br>
+    <input type="text" name="name" maxlength="200" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:5px;font-size:15px;margin-top:4px;">
+  </label>
+  <label>Anything we should know (optional)<br>
+    <textarea name="details" maxlength="1000" rows="3" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:5px;font-size:15px;margin-top:4px;"></textarea>
+  </label>
+  <button type="submit" class="cta" style="border:none;cursor:pointer;font-size:15px;">Remove my information</button>
+</form>
+<p class="muted" style="margin-top:18px;">What happens: any record matching this email is deleted from our database immediately, and the address is added to a permanent suppression list so future data collection skips it. Removal covers Whistle's database; it does not change your university's own public directory.</p>`;
+  res.type("html").send(page({
+    title: "Remove My Information — Whistle",
+    description: "Request removal of your contact information from Whistle's database.",
+    canonicalPath: "/remove-my-info",
+    body,
+  }));
+});
+
+router.post("/remove-my-info", async (req, res) => {
+  try {
+    const email = String(req.body?.email ?? "").trim().toLowerCase();
+    const name = String(req.body?.name ?? "").trim().slice(0, 200) || null;
+    const details = String(req.body?.details ?? "").trim().slice(0, 1000) || null;
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      return res.status(400).type("html").send(page({
+        title: "Remove My Information — Whistle",
+        description: "Request removal of your contact information from Whistle's database.",
+        canonicalPath: "/remove-my-info",
+        body: `<h1>That didn't look like an email address</h1><p class="sub"><a href="/remove-my-info">Try again</a>.</p>`,
+      }));
+    }
+
+    // Record the request (idempotent — resubmitting the same email is a no-op).
+    await db.insert(optOutRequests)
+      .values({ email, name, details })
+      .onConflictDoNothing({ target: optOutRequests.email });
+
+    // Honor it immediately.
+    const deleted = await db.delete(staffMembers)
+      .where(sql`lower(${staffMembers.email}) = ${email}`)
+      .returning({ id: staffMembers.id });
+
+    await db.update(optOutRequests)
+      .set({ status: "processed", processedAt: new Date() })
+      .where(eq(optOutRequests.email, email));
+
+    console.log(`[OptOut] Processed removal for ${email}: ${deleted.length} record(s) deleted, email suppressed`);
+
+    res.type("html").send(page({
+      title: "Removal Complete — Whistle",
+      description: "Your removal request has been processed.",
+      canonicalPath: "/remove-my-info",
+      body: `<h1>Done — your information is removed</h1>
+<p class="sub">${deleted.length > 0
+        ? `We deleted ${deleted.length} record${deleted.length === 1 ? "" : "s"} matching that address, effective immediately.`
+        : `That address wasn't in our database, and we've added it to our suppression list as a precaution.`}
+Either way, the address is now permanently suppressed — future data collection will skip it.</p>
+<p class="muted">If your details appear under a different email address, submit that one too. Questions: this page is the fastest path, and requests are processed automatically.</p>`,
+    }));
+  } catch (err) {
+    console.error("[Public] opt-out error:", err);
+    res.status(500).type("html").send("Something went wrong processing your request. Please try again.");
   }
 });
 

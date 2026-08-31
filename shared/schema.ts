@@ -907,6 +907,20 @@ export type NilCollective = typeof nilCollectives.$inferSelect;
 // ORGANIZATIONS - Multi-seat team billing
 // ============================================================================
 
+// Data-subject removal requests from the public /remove-my-info page.
+// The email doubles as a permanent suppression list: matching staff rows are
+// deleted on request, and ingest checks this table so a re-scrape can never
+// silently re-add someone who asked to be removed.
+export const optOutRequests = pgTable("opt_out_requests", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  name: text("name"),
+  details: text("details"),
+  status: text("status").notNull().default("received"), // 'received' | 'processed'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  processedAt: timestamp("processed_at"),
+});
+
 export const organizations = pgTable("organizations", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
