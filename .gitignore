@@ -13,3 +13,8 @@ package-lock.json.replit-backup
 # Replit artifact dump: pasted prompts + third-party sample code.
 # Contained a real Stripe test key; kept out of the repo entirely.
 attached_assets/
+
+# Fulfillment outputs — never commit customer/product data
+sample.csv
+export.csv
+*.deliverable.csv
