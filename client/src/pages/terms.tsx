@@ -40,7 +40,7 @@ export default function TermsPage() {
             <p>
               You are responsible for maintaining the confidentiality of your account credentials and for
               all activity that occurs under your account. Notify us immediately at
-              <a href="mailto:support@whistle.app" className="underline"> support@whistle.app</a> if you
+              <a href="mailto:support@gowhistle.io" className="underline"> support@gowhistle.io</a> if you
               suspect unauthorized access.
             </p>
           </section>
@@ -133,7 +133,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-xl font-semibold">11. Contact</h2>
             <p>
-              Questions? Email <a href="mailto:support@whistle.app" className="underline">support@whistle.app</a>.
+              Questions? Email <a href="mailto:support@gowhistle.io" className="underline">support@gowhistle.io</a>.
             </p>
           </section>
         </div>

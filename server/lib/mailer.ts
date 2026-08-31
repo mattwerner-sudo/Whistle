@@ -14,7 +14,7 @@ export interface MailMessage {
 
 export async function sendMail(msg: MailMessage): Promise<{ delivered: boolean; reason?: string }> {
   const apiKey = process.env.SENDGRID_API_KEY;
-  const from = process.env.MAIL_FROM || "noreply@whistle.app";
+  const from = process.env.MAIL_FROM || "noreply@gowhistle.io";
 
   if (!apiKey) {
     console.log(`[Mailer] (no SENDGRID_API_KEY) would send to=${msg.to} subject="${msg.subject}"`);
@@ -50,5 +50,5 @@ export async function sendMail(msg: MailMessage): Promise<{ delivered: boolean; 
 }
 
 export function getFounderEmail(): string {
-  return process.env.FOUNDER_EMAIL || process.env.SALES_INBOX || "founder@whistle.app";
+  return process.env.FOUNDER_EMAIL || process.env.SALES_INBOX || "founder@gowhistle.io";
 }

@@ -397,7 +397,7 @@ router.get("/data", async (_req, res) => {
 <h2>How it works</h2>
 <div class="tablewrap"><table>
 <tbody>
-<tr><td class="muted" style="white-space:nowrap;">01</td><td>Email <a href="mailto:support@whistle.app">support@whistle.app</a> with what you need (titles, conferences, or a bundle above). Include "data purchase" in the subject.</td></tr>
+<tr><td class="muted" style="white-space:nowrap;">01</td><td>Email <a href="mailto:support@gowhistle.io">support@gowhistle.io</a> with what you need (titles, conferences, or a bundle above). Include "data purchase" in the subject.</td></tr>
 <tr><td class="muted">02</td><td>We confirm the exact row count and price before you pay — no surprises.</td></tr>
 <tr><td class="muted">03</td><td>Pay by card; your CSV is delivered within 2 business days (usually same-day).</td></tr>
 </tbody>

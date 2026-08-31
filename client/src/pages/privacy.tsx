@@ -50,7 +50,7 @@ export default function PrivacyPage() {
               official athletic department websites and other public sources. We do not include personal
               information beyond what is published in a professional capacity by the staff member or
               their institution. If you are an athletic staff member and want your information removed,
-              email <a href="mailto:privacy@whistle.app" className="underline">privacy@whistle.app</a> and
+              email <a href="mailto:privacy@gowhistle.io" className="underline">privacy@gowhistle.io</a> and
               we will process your request within 30 days.
             </p>
           </section>
@@ -82,7 +82,7 @@ export default function PrivacyPage() {
             <p>
               We retain account and billing records for the life of your account and for up to 7 years
               afterwards for tax and audit purposes. You may request deletion of your account data
-              earlier by emailing <a href="mailto:privacy@whistle.app" className="underline">privacy@whistle.app</a>.
+              earlier by emailing <a href="mailto:privacy@gowhistle.io" className="underline">privacy@gowhistle.io</a>.
             </p>
           </section>
 
@@ -90,7 +90,7 @@ export default function PrivacyPage() {
             <h2 className="text-xl font-semibold">Your rights</h2>
             <p>
               Depending on your jurisdiction you may have the right to access, correct, export, or
-              delete your personal information. Email <a href="mailto:privacy@whistle.app" className="underline">privacy@whistle.app</a>
+              delete your personal information. Email <a href="mailto:privacy@gowhistle.io" className="underline">privacy@gowhistle.io</a>
               and we will respond within 30 days.
             </p>
           </section>
@@ -98,7 +98,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold">Contact</h2>
             <p>
-              For any privacy question, email <a href="mailto:privacy@whistle.app" className="underline">privacy@whistle.app</a>.
+              For any privacy question, email <a href="mailto:privacy@gowhistle.io" className="underline">privacy@gowhistle.io</a>.
             </p>
           </section>
         </div>

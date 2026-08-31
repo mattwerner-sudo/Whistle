@@ -18,7 +18,7 @@ export default function LegalFooter() {
           <Link href="/pricing" data-testid="link-footer-pricing" className="text-muted-foreground hover:text-foreground">Pricing</Link>
           <Link href="/terms" data-testid="link-footer-terms" className="text-muted-foreground hover:text-foreground">Terms of Service</Link>
           <Link href="/privacy" data-testid="link-footer-privacy" className="text-muted-foreground hover:text-foreground">Privacy Policy</Link>
-          <a href="mailto:support@whistle.app" data-testid="link-footer-support" className="text-muted-foreground hover:text-foreground">Contact</a>
+          <a href="mailto:support@gowhistle.io" data-testid="link-footer-support" className="text-muted-foreground hover:text-foreground">Contact</a>
         </nav>
       </div>
     </footer>

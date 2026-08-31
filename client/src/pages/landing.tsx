@@ -14,7 +14,7 @@ const features = [
   {
     icon: Users,
     title: 'Staff Directory Access',
-    description: 'Access contact details for 1,100+ college athletic departments across all divisions.',
+    description: 'Deep contact coverage for 225+ Division I athletic departments, with on-demand extraction for any NCAA school.',
   },
   {
     icon: Zap,
@@ -43,11 +43,15 @@ const features = [
   },
 ];
 
+// Keep these conservative relative to the live database so they stay true as
+// coverage grows — never ahead of it. Verified against production data
+// 2026-08-31: 227 schools extracted, 39,677 contacts, 29,412 verified
+// emails, 20 conferences.
 const stats = [
-  { value: '1,100+', label: 'College Schools' },
-  { value: '50,000+', label: 'Athletic Staff Contacts' },
-  { value: '3', label: 'College Divisions' },
-  { value: '32', label: 'Conferences' },
+  { value: '225+', label: 'D1 Athletic Departments' },
+  { value: '39,000+', label: 'Staff Contacts' },
+  { value: '29,000+', label: 'Verified Emails' },
+  { value: '20+', label: 'Conferences' },
 ];
 
 // Copy-paste onboarding for the API and MCP surfaces (both already live in
@@ -175,14 +179,15 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-6 py-24 relative">
           <div className="text-center max-w-3xl mx-auto">
             <Badge className="mb-6" variant="secondary">
-              The #1 College Athletics Intelligence Platform
+              College Athletics Sales Intelligence
             </Badge>
             <h1 className="text-5xl font-bold tracking-tight text-foreground mb-6">
               Find and connect with college athletic staff in seconds
             </h1>
             <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-              Whistle gives you instant access to verified contact data for coaches, 
-              athletic directors, and staff across all 1,100+ college institutions.
+              Whistle gives you verified contact data for coaches, athletic directors,
+              and staff across 225+ Division I athletic departments — extracted from
+              official staff directories and expanding toward all 1,100+ NCAA schools.
             </p>
             <div className="flex items-center justify-center gap-4">
               <Link href="/pricing">
@@ -214,7 +219,7 @@ export default function Landing() {
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold mb-4">How It Works</h2>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              Three simple steps to access the most comprehensive college staff database
+              Three simple steps to access a continuously refreshed college athletics staff database
             </p>
           </div>
           
@@ -353,8 +358,9 @@ export default function Landing() {
             Ready to connect with college athletics?
           </h2>
           <p className="text-primary-foreground/80 text-lg mb-8 max-w-2xl mx-auto">
-            Join hundreds of sales teams, recruiters, and vendors who use Whistle 
-            to reach athletic departments faster.
+            Built for sales teams, recruiters, and vendors who need to reach
+            athletic departments faster — with data pulled straight from the
+            directories schools publish themselves.
           </p>
           <Link href="/pricing">
             <Button size="lg" variant="secondary" className="gap-2" data-testid="button-final-cta">

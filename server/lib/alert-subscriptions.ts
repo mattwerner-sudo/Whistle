@@ -111,7 +111,7 @@ function formatSubject(type: string, schoolName: string, meta?: Record<string, a
 }
 
 function formatBody(signal: SignalPayload, schoolName: string): string {
-  const appUrl = process.env.APP_URL ?? "https://whistle.app";
+  const appUrl = process.env.APP_URL ?? "https://gowhistle.io";
   return [
     signal.description,
     "",
