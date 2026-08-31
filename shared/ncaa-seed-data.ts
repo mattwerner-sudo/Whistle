@@ -2244,5 +2244,30 @@ export const seedSchools = [
     directoryUrl: "https://suutbirds.com/staff-directory",
     conference: "BigSky",
     division: "Division I"
-  }
+  },
+
+  // --- Patriot League (10 Schools) — added 2026-08-31, founder-reported gap ---
+  { schoolId: "american", schoolName: "American", schoolFullName: "American University", ncaaUrl: "https://www.ncaa.com/schools/american", directoryUrl: "https://aueagles.com/staff-directory", conference: "Patriot", division: "Division I" },
+  { schoolId: "army", schoolName: "Army", schoolFullName: "United States Military Academy", ncaaUrl: "https://www.ncaa.com/schools/army-west-point", directoryUrl: "https://goarmywestpoint.com/staff-directory", conference: "Patriot", division: "Division I" },
+  { schoolId: "bostonu", schoolName: "Boston University", schoolFullName: "Boston University", ncaaUrl: "https://www.ncaa.com/schools/boston-u", directoryUrl: "https://goterriers.com/staff-directory", conference: "Patriot", division: "Division I" },
+  { schoolId: "bucknell", schoolName: "Bucknell", schoolFullName: "Bucknell University", ncaaUrl: "https://www.ncaa.com/schools/bucknell", directoryUrl: "https://bucknellbison.com/staff-directory", conference: "Patriot", division: "Division I" },
+  { schoolId: "colgate", schoolName: "Colgate", schoolFullName: "Colgate University", ncaaUrl: "https://www.ncaa.com/schools/colgate", directoryUrl: "https://gocolgateraiders.com/staff-directory", conference: "Patriot", division: "Division I" },
+  { schoolId: "holycross", schoolName: "Holy Cross", schoolFullName: "College of the Holy Cross", ncaaUrl: "https://www.ncaa.com/schools/holy-cross", directoryUrl: "https://goholycross.com/staff-directory", conference: "Patriot", division: "Division I" },
+  { schoolId: "lafayette", schoolName: "Lafayette", schoolFullName: "Lafayette College", ncaaUrl: "https://www.ncaa.com/schools/lafayette", directoryUrl: "https://goleopards.com/staff-directory", conference: "Patriot", division: "Division I" },
+  { schoolId: "lehigh", schoolName: "Lehigh", schoolFullName: "Lehigh University", ncaaUrl: "https://www.ncaa.com/schools/lehigh", directoryUrl: "https://lehighsports.com/staff-directory", conference: "Patriot", division: "Division I" },
+  { schoolId: "loyolamd", schoolName: "Loyola Maryland", schoolFullName: "Loyola University Maryland", ncaaUrl: "https://www.ncaa.com/schools/loyola-md", directoryUrl: "https://loyolagreyhounds.com/staff-directory", conference: "Patriot", division: "Division I" },
+  { schoolId: "navy", schoolName: "Navy", schoolFullName: "United States Naval Academy", ncaaUrl: "https://www.ncaa.com/schools/navy", directoryUrl: "https://navysports.com/staff-directory", conference: "Patriot", division: "Division I" },
+
+  // --- Big East (11 Schools) — added 2026-08-31 ---
+  { schoolId: "butler", schoolName: "Butler", schoolFullName: "Butler University", ncaaUrl: "https://www.ncaa.com/schools/butler", directoryUrl: "https://butlersports.com/staff-directory", conference: "BigEast", division: "Division I" },
+  { schoolId: "creighton", schoolName: "Creighton", schoolFullName: "Creighton University", ncaaUrl: "https://www.ncaa.com/schools/creighton", directoryUrl: "https://gocreighton.com/staff-directory", conference: "BigEast", division: "Division I" },
+  { schoolId: "depaul", schoolName: "DePaul", schoolFullName: "DePaul University", ncaaUrl: "https://www.ncaa.com/schools/depaul", directoryUrl: "https://depaulbluedemons.com/staff-directory", conference: "BigEast", division: "Division I" },
+  { schoolId: "georgetown", schoolName: "Georgetown", schoolFullName: "Georgetown University", ncaaUrl: "https://www.ncaa.com/schools/georgetown", directoryUrl: "https://guhoyas.com/staff-directory", conference: "BigEast", division: "Division I" },
+  { schoolId: "marquette", schoolName: "Marquette", schoolFullName: "Marquette University", ncaaUrl: "https://www.ncaa.com/schools/marquette", directoryUrl: "https://gomarquette.com/staff-directory", conference: "BigEast", division: "Division I" },
+  { schoolId: "providence", schoolName: "Providence", schoolFullName: "Providence College", ncaaUrl: "https://www.ncaa.com/schools/providence", directoryUrl: "https://friars.com/staff-directory", conference: "BigEast", division: "Division I" },
+  { schoolId: "setonhall", schoolName: "Seton Hall", schoolFullName: "Seton Hall University", ncaaUrl: "https://www.ncaa.com/schools/seton-hall", directoryUrl: "https://shupirates.com/staff-directory", conference: "BigEast", division: "Division I" },
+  { schoolId: "stjohns", schoolName: "St. John's", schoolFullName: "St. John's University", ncaaUrl: "https://www.ncaa.com/schools/st-johns-ny", directoryUrl: "https://redstormsports.com/staff-directory", conference: "BigEast", division: "Division I" },
+  { schoolId: "uconn", schoolName: "UConn", schoolFullName: "University of Connecticut", ncaaUrl: "https://www.ncaa.com/schools/uconn", directoryUrl: "https://uconnhuskies.com/staff-directory", conference: "BigEast", division: "Division I" },
+  { schoolId: "villanova", schoolName: "Villanova", schoolFullName: "Villanova University", ncaaUrl: "https://www.ncaa.com/schools/villanova", directoryUrl: "https://villanova.com/staff-directory", conference: "BigEast", division: "Division I" },
+  { schoolId: "xavier", schoolName: "Xavier", schoolFullName: "Xavier University", ncaaUrl: "https://www.ncaa.com/schools/xavier", directoryUrl: "https://goxavier.com/staff-directory", conference: "BigEast", division: "Division I" }
 ];

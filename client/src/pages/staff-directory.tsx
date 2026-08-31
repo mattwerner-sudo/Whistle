@@ -827,6 +827,10 @@ export default function StaffDirectory() {
   // Fetch school directories
   const buildSchoolsQueryUrl = () => {
     const params = new URLSearchParams();
+    // The search box was silently ignored on the schools view — the staff
+    // query passed `search` but this one never did. The API has supported it
+    // all along (matches schoolId, short name, and full name).
+    if (searchQuery) params.set('search', searchQuery);
     if (divisionFilter && divisionFilter !== 'all') params.set('division', divisionFilter);
     if (selectedConference) params.set('conference', selectedConference);
     params.set('limit', pageSize.toString());
