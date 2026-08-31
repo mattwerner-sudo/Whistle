@@ -79,13 +79,27 @@ function useRevealMutation() {
         window.location.href = '/pricing';
         return;
       }
-      toast({ variant: 'destructive', title: 'Could not reveal', description: msg || 'Please try again.' });
+      if (payload?.code === 'no_contact' || msg.includes('no_contact')) {
+        toast({ title: 'No contact on file', description: 'The school’s directory doesn’t publish an email or phone for this person. No credit was used.' });
+        return;
+      }
+      toast({ variant: 'destructive', title: 'Could not reveal', description: payload?.message || 'Please try again.' });
     },
   });
 }
 
-function RevealButton({ staffId, size = 'sm', variant = 'default', className = '' }: { staffId: number; size?: 'sm' | 'default' | 'icon'; variant?: 'default' | 'outline' | 'ghost'; className?: string }) {
+function RevealButton({ staffId, size = 'sm', variant = 'default', className = '', hasContact = true }: { staffId: number; size?: 'sm' | 'default' | 'icon'; variant?: 'default' | 'outline' | 'ghost'; className?: string; hasContact?: boolean }) {
   const mutation = useRevealMutation();
+  // ~20% of records come from directories that publish no email or phone for
+  // that person. Offering a Reveal button there is a dead end — show the
+  // truth instead of an error after the click.
+  if (!hasContact) {
+    return (
+      <span className={`inline-flex items-center text-xs text-muted-foreground ${className}`} data-testid={`text-no-contact-${staffId}`}>
+        No contact listed
+      </span>
+    );
+  }
   return (
     <Button
       size={size}
@@ -223,7 +237,7 @@ function StaffCard({ member, onClick, inNetwork, networkConnectedAt, networkConn
                 </span>
               )}
               {!member.isRevealed && (
-                <RevealButton staffId={member.id} size="sm" variant="outline" className="ml-auto h-6 px-2 text-xs" />
+                <RevealButton staffId={member.id} size="sm" variant="outline" className="ml-auto h-6 px-2 text-xs" hasContact={member.email != null || member.phone != null} />
               )}
             </div>
           </div>
@@ -329,7 +343,7 @@ function ExpandedContactDialog({
                   <Copy className="h-4 w-4" />
                 </Button>
               ) : (
-                <RevealButton staffId={member.id} variant="default" />
+                <RevealButton staffId={member.id} variant="default" hasContact={member.email != null || member.phone != null} />
               )}
             </div>
             
@@ -457,7 +471,7 @@ function ExpandedContactDialog({
               </a>
             </>
           ) : (
-            <RevealButton staffId={member.id} variant="default" />
+            <RevealButton staffId={member.id} variant="default" hasContact={member.email != null || member.phone != null} />
           )}
         </DialogFooter>
       </DialogContent>
@@ -1590,7 +1604,7 @@ export default function StaffDirectory() {
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
                             {!member.isRevealed && (
-                              <RevealButton staffId={member.id} size="sm" variant="outline" />
+                              <RevealButton staffId={member.id} size="sm" variant="outline" hasContact={member.email != null || member.phone != null} />
                             )}
                             {member.linkedinUrl && (
                               <a 
