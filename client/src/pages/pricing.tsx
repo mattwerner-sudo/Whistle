@@ -50,7 +50,7 @@ const TIERS: Tier[] = [
       '2,400 reveals/year included',
       '$0.50 per overage reveal',
       'AI email drafting & meeting prep',
-      'Whistle Connect LinkedIn sync',
+      'Hire & departure signals feed',
       '14-day free trial',
     ],
     cta: 'Start Pro trial',
