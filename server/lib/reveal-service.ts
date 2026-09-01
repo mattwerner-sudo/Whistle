@@ -10,7 +10,7 @@ const OVERAGE_RATES: Record<string, number> = { pro: 50, team: 35, enterprise: 2
 
 export interface RevealResult {
   status: "ok";
-  source: "cached" | "subscription" | "overage";
+  source: "cached" | "subscription" | "overage" | "trial";
   email: string | null;
   phone: string | null;
   chargedCredits: number;
@@ -97,11 +97,17 @@ export async function revealContact(
   } else if (isActiveSub) {
     source = "overage";
     chargedCredits = 1;
+  } else if (user.trialSchoolId && staff.schoolId === user.trialSchoolId) {
+    // Free trial: unlimited reveals scoped to the user's single chosen school.
+    source = "trial";
+    chargedCredits = 0;
   } else {
     return {
       status: "error",
       code: "out_of_quota",
-      message: "An active subscription is required to reveal contacts.",
+      message: user.trialSchoolId
+        ? "Your free preview covers one school. Subscribe to reveal contacts everywhere."
+        : "An active subscription is required to reveal contacts.",
       upgradeRequired: true,
     };
   }

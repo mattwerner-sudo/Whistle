@@ -217,6 +217,7 @@ router.get("/me", async (req: Request, res: Response) => {
             monthlyCreditsAllocation: user.monthlyCreditsAllocation,
             creditsUsedThisPeriod: user.creditsUsedThisPeriod,
             currentPeriodEnd: user.currentPeriodEnd,
+            trialSchoolId: user.trialSchoolId,
           },
         });
       }

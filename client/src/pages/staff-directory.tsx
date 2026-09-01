@@ -702,6 +702,22 @@ export default function StaffDirectory() {
   const [selectedStaffIdForList, setSelectedStaffIdForList] = useState<number | null>(null);
   const [newListName, setNewListName] = useState('');
   const [expandedContact, setExpandedContact] = useState<(StaffMember & { schoolName?: string; schoolLogo?: string }) | null>(null);
+
+  // Free one-school preview
+  const meQuery = useQuery<{ user: { subscriptionStatus?: string; trialSchoolId?: string | null } | null }>({ queryKey: ['/api/auth/me'] });
+  const me = meQuery.data?.user;
+  const trialEligible = !!me && me.subscriptionStatus !== 'active' && !me.trialSchoolId;
+  const claimTrialMutation = useMutation({
+    mutationFn: async (schoolId: string) => await apiRequest('POST', '/api/trial/school', { schoolId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
+      toast({ title: 'Free preview unlocked', description: 'Reveal any contact at this school — on us. Your other 340+ schools are one subscription away.' });
+    },
+    onError: async (err: any) => {
+      const payload = typeof err?.json === 'function' ? await err.json().catch(() => null) : null;
+      toast({ variant: 'destructive', title: 'Could not unlock preview', description: payload?.error || 'Please try again.' });
+    },
+  });
   
   // Read ?school= URL parameter on mount and auto-select school
   useEffect(() => {
@@ -1538,6 +1554,25 @@ export default function StaffDirectory() {
                 )}
               </Button>
             </div>
+            {selectedSchoolId && me?.trialSchoolId === selectedSchoolId && (
+              <div className="mt-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm" data-testid="banner-trial-active">
+                <span className="font-medium">Free preview school</span> — reveal any contact here at no cost. Want every school? <a href="/pricing" className="text-primary underline">See plans</a>.
+              </div>
+            )}
+            {selectedSchoolId && trialEligible && (
+              <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm" data-testid="banner-trial-offer">
+                <span>Preview one school free — reveal every contact here, no card required. This choice is permanent.</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={claimTrialMutation.isPending}
+                  onClick={() => claimTrialMutation.mutate(selectedSchoolId)}
+                  data-testid="button-claim-trial"
+                >
+                  {claimTrialMutation.isPending ? 'Unlocking…' : 'Unlock this school free'}
+                </Button>
+              </div>
+            )}
           </DialogHeader>
 
           {/* Modal Content: Staff Table */}

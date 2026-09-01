@@ -235,7 +235,7 @@ export default function Pricing() {
           <Badge className="mb-4" variant="secondary">Simple, transparent pricing</Badge>
           <h1 className="text-4xl font-bold mb-4" data-testid="text-pricing-title">Pay only when you reveal a contact</h1>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            Browse every school and staff name for free. Reveal an email or phone number only when you're ready to reach out.
+            Browse every school and staff name for free, and preview any one school's full contacts free — no card required. Reveal contacts everywhere with a plan.
           </p>
         </div>
 

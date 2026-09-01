@@ -854,6 +854,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Free trial: claim the one school this account may reveal freely.
+  // Permanent choice — refused if already set or if the user has an active subscription.
+  app.post("/api/trial/school", requireUser, async (req: UserRequest, res) => {
+    try {
+      const schoolId = typeof req.body?.schoolId === "string" ? req.body.schoolId.trim() : "";
+      if (!schoolId) {
+        return res.status(400).json({ error: "schoolId is required" });
+      }
+      const { users, schoolDirectories } = await import("@shared/schema");
+      const { db } = await import("./db");
+      const { eq, and, isNull } = await import("drizzle-orm");
+
+      const [school] = await db.select({ schoolId: schoolDirectories.schoolId, schoolFullName: schoolDirectories.schoolFullName })
+        .from(schoolDirectories).where(eq(schoolDirectories.schoolId, schoolId)).limit(1);
+      if (!school) {
+        return res.status(404).json({ error: "School not found" });
+      }
+
+      const [user] = await db.select().from(users).where(eq(users.id, req.user!.id)).limit(1);
+      if (!user) return res.status(404).json({ error: "User not found" });
+      if (user.subscriptionStatus === "active") {
+        return res.status(400).json({ error: "Your subscription already covers every school." });
+      }
+      if (user.trialSchoolId) {
+        return res.status(409).json({ error: "Free preview already used", trialSchoolId: user.trialSchoolId });
+      }
+
+      // Conditional set guards against concurrent double-claim.
+      const claimed = await db.update(users)
+        .set({ trialSchoolId: schoolId })
+        .where(and(eq(users.id, req.user!.id), isNull(users.trialSchoolId)))
+        .returning({ id: users.id });
+      if (claimed.length === 0) {
+        return res.status(409).json({ error: "Free preview already used" });
+      }
+
+      await db.insert((await import("@shared/schema")).usageEvents).values({
+        eventType: "trial_school_claimed",
+        schoolId,
+        sessionId: req.sessionID || null,
+        details: { userId: req.user!.id },
+      });
+      res.json({ success: true, trialSchoolId: schoolId, schoolFullName: school.schoolFullName });
+    } catch (error: any) {
+      console.error("Trial school claim error:", error);
+      res.status(500).json({ error: error.message || "Failed to set trial school" });
+    }
+  });
+
   // Get overall stats
   app.get("/api/staff/stats", requireUser, async (_req, res) => {
     try {

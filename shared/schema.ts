@@ -694,6 +694,8 @@ export const users = pgTable("users", {
   stripeSubscriptionId: text("stripe_subscription_id"),
   subscriptionStatus: text("subscription_status").default("inactive"), // 'active', 'past_due', 'canceled', 'inactive'
   priceId: text("price_id"), // Track which tier they bought
+  // Free trial: one school the user may reveal freely (permanent choice, no card)
+  trialSchoolId: text("trial_school_id"),
   currentPeriodEnd: timestamp("current_period_end"), // When access expires
   currentPeriodStart: timestamp("current_period_start"), // When billing period started
   createdAt: timestamp("created_at").defaultNow(),
