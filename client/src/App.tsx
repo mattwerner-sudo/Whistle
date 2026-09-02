@@ -168,6 +168,7 @@ function AppRouter() {
       <Route path="/dashboard" component={HomePage} />
       <Route path="/staff" component={StaffDirectory} />
       <Route path="/schools" component={StaffDirectory} />
+      <Route path="/free" component={StaffDirectory} />
       <Route path="/jobs" component={Jobs} />
       <Route path="/reports" component={Reports} />
       <Route path="/signals" component={Signals} />
@@ -219,6 +220,7 @@ function App() {
         <Switch>
           <Route path="/" component={Landing} />
           <Route path="/login" component={Login} />
+          <Route path="/free" component={Login} />
           <Route path="/pricing" component={Pricing} />
           <Route path="/forgot-password" component={ForgotPassword} />
           <Route path="/reset-password/:token" component={ResetPassword} />

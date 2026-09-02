@@ -30,6 +30,12 @@ export default function Login() {
   const [registerName, setRegisterName] = useState('');
   const [registerAcceptedTos, setRegisterAcceptedTos] = useState(false);
 
+  // /free landing: default to the Register tab and carry an optional ?school=
+  // deep link through signup so the user lands on that school's unlock banner.
+  const [freeMode] = useState(() => window.location.pathname === '/free');
+  const [deepLinkSchool] = useState(() => new URLSearchParams(window.location.search).get('school'));
+  const postAuthDestination = deepLinkSchool ? `/schools?school=${encodeURIComponent(deepLinkSchool)}` : '/dashboard';
+
   const { data: googleConfig } = useQuery<{ enabled: boolean }>({
     queryKey: ['/api/auth/google/config'],
   });
@@ -56,7 +62,7 @@ export default function Login() {
       if (data.success) {
         queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
         toast({ title: 'Welcome back!', description: 'You are now logged in.' });
-        setLocation('/dashboard');
+        setLocation(postAuthDestination);
       }
     },
     onError: (error: any) => {
@@ -75,8 +81,8 @@ export default function Login() {
     onSuccess: (data) => {
       if (data.success) {
         queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
-        toast({ title: 'Account Created!', description: 'Welcome to Whistle.' });
-        setLocation('/dashboard');
+        toast({ title: 'Account Created!', description: deepLinkSchool ? 'Welcome to Whistle — unlock your free preview school below.' : 'Welcome to Whistle.' });
+        setLocation(postAuthDestination);
       }
     },
     onError: (error: any) => {
@@ -120,8 +126,12 @@ export default function Login() {
               <Database className="h-6 w-6 text-primary-foreground" />
             </div>
           </div>
-          <CardTitle>Welcome to Whistle</CardTitle>
-          <CardDescription>Sign in to access college athletics intelligence</CardDescription>
+          <CardTitle>{freeMode ? 'Preview one school free' : 'Welcome to Whistle'}</CardTitle>
+          <CardDescription>
+            {freeMode
+              ? 'Create a free account — no card required — then unlock every verified contact at any one school of your choice.'
+              : 'Sign in to access college athletics intelligence'}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {googleConfig?.enabled && (
@@ -145,7 +155,7 @@ export default function Login() {
               </div>
             </div>
           )}
-          <Tabs defaultValue="login">
+          <Tabs defaultValue={freeMode ? "register" : "login"}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="login" data-testid="tab-login">Sign In</TabsTrigger>
               <TabsTrigger value="register" data-testid="tab-register">Register</TabsTrigger>
