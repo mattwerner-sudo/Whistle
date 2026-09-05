@@ -160,6 +160,10 @@ export async function revealContact(
   // Sentinel thrown inside the transaction when a concurrent reveal consumed
   // the last of the monthly allowance between our read and this write.
   class AllowanceExhausted extends Error {}
+  // Thrown when a concurrent request revealed this same contact between our
+  // read and this write — the unique (userId, staffId) index rejects the second
+  // insert. We treat it as a cached hit: no charge, no double-spend.
+  class AlreadyRevealed extends Error {}
 
   try {
     await db.transaction(async (tx) => {
@@ -169,7 +173,14 @@ export async function revealContact(
           .set({ revealedAt: new Date(), chargedCredits, source })
           .where(eq(contactReveals.id, existing.id));
       } else {
-        await tx.insert(contactReveals).values({ userId, staffId, chargedCredits, source });
+        const insertedReveal = await tx
+          .insert(contactReveals)
+          .values({ userId, staffId, chargedCredits, source })
+          .onConflictDoNothing({ target: [contactReveals.userId, contactReveals.staffId] })
+          .returning({ id: contactReveals.id });
+        // Conflict: another in-flight reveal already inserted this row. Abort
+        // without charging so we never bill twice for one contact.
+        if (insertedReveal.length === 0) throw new AlreadyRevealed();
       }
 
       if (source === "subscription") {
@@ -213,6 +224,18 @@ export async function revealContact(
       });
     });
   } catch (err) {
+    if (err instanceof AlreadyRevealed) {
+      // A concurrent request already revealed this contact — return it as a
+      // free cached hit rather than erroring or charging again.
+      return {
+        status: "ok",
+        source: "cached",
+        email: staff.email,
+        phone: staff.phone,
+        chargedCredits: 0,
+        remainingMonthlyReveals: getRemainingMonthly(user),
+      };
+    }
     if (err instanceof AllowanceExhausted) {
       // A retry will re-evaluate and take the overage path (or be refused).
       return {
