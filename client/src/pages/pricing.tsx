@@ -24,6 +24,12 @@ interface UserResponse {
   } | null;
 }
 
+const CREDIT_PACKS = [
+  { packId: 'pack_500', credits: 500, price: 300, perReveal: '0.60' },
+  { packId: 'pack_1500', credits: 1500, price: 750, perReveal: '0.50' },
+  { packId: 'pack_5000', credits: 5000, price: 2000, perReveal: '0.40' },
+];
+
 interface Tier {
   id: 'pro' | 'team' | 'enterprise';
   name: string;
@@ -175,7 +181,7 @@ export default function Pricing() {
   const hasActiveSub = user?.subscriptionStatus === 'active';
 
   const checkoutMutation = useMutation({
-    mutationFn: async (params: { type: 'subscription'; planId?: string }) => {
+    mutationFn: async (params: { type: 'subscription' | 'credits'; planId?: string; packId?: string }) => {
       return await apiRequest('POST', '/api/billing/checkout', params);
     },
     onSuccess: (data) => {
@@ -297,6 +303,40 @@ export default function Pricing() {
               </Card>
             );
           })}
+        </div>
+
+        <div className="mt-16 max-w-4xl mx-auto">
+          <div className="text-center mb-6">
+            <h2 className="text-2xl font-semibold">No commitment? Buy reveal credits.</h2>
+            <p className="text-muted-foreground mt-1">One-time packs, applied instantly. No subscription — reveals never expire.</p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            {CREDIT_PACKS.map((pack) => (
+              <Card key={pack.packId} data-testid={`card-pack-${pack.packId}`}>
+                <CardHeader>
+                  <CardTitle className="text-xl">{pack.credits.toLocaleString()} reveals</CardTitle>
+                  <CardDescription>
+                    <span className="text-2xl font-bold text-foreground">${pack.price.toLocaleString()}</span>
+                    <span className="ml-1 text-sm">one-time · ${pack.perReveal}/reveal</span>
+                  </CardDescription>
+                </CardHeader>
+                <CardFooter>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    disabled={checkoutMutation.isPending}
+                    onClick={() => {
+                      if (!user) { window.location.href = '/login'; return; }
+                      checkoutMutation.mutate({ type: 'credits', packId: pack.packId });
+                    }}
+                    data-testid={`button-buy-${pack.packId}`}
+                  >
+                    Buy {pack.credits.toLocaleString()} credits
+                  </Button>
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
         </div>
 
         <div className="mt-12 text-center text-sm text-muted-foreground max-w-2xl mx-auto space-y-2">

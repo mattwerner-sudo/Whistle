@@ -42,11 +42,21 @@ const SUBSCRIPTION_PLANS: Record<string, {
   },
 };
 
+// Prepaid credit packs — self-serve, one-time, no subscription. Priced at
+// Whistle's premium ($0.40–0.60/reveal), NOT commodity-enrichment rates, so
+// packs feed the funnel without undercutting the annual plans.
+const CREDIT_PACKS: Record<string, { name: string; credits: number; price: number }> = {
+  'pack_500':  { name: 'Whistle 500 Reveals',   credits: 500,   price: 30000 },  // $300  ($0.60)
+  'pack_1500': { name: 'Whistle 1,500 Reveals', credits: 1500,  price: 75000 },  // $750  ($0.50)
+  'pack_5000': { name: 'Whistle 5,000 Reveals', credits: 5000,  price: 200000 }, // $2,000 ($0.40)
+};
+
 const TRIAL_PERIOD_DAYS = 14;
 
 const checkoutSchema = z.object({
-  type: z.enum(['subscription']),
+  type: z.enum(['subscription', 'credits']),
   planId: z.string().optional(),
+  packId: z.string().optional(),
 });
 
 const router = Router();
@@ -82,15 +92,19 @@ router.post("/checkout", async (req: Request, res: Response) => {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
 
     if (type === 'subscription') {
-      if (!planId || !SUBSCRIPTION_PLANS[planId]) {
+      // Accept either the internal key ('plan_pro') or the Stripe lookup key
+      // ('whistle_pro_annual') the client actually sends.
+      const plan = planId
+        ? (SUBSCRIPTION_PLANS[planId] ??
+           Object.values(SUBSCRIPTION_PLANS).find((p) => p.lookupKey === planId))
+        : undefined;
+      if (!plan) {
         return res.status(400).json({ error: "Invalid subscription plan" });
       }
 
-      const plan = SUBSCRIPTION_PLANS[planId];
-
       const session = await stripeService.createSubscriptionCheckoutSession(
         customerId,
-        planId,
+        planId ?? plan.tier,
         plan,
         plan.lookupKey,
         'year',
@@ -104,6 +118,31 @@ router.post("/checkout", async (req: Request, res: Response) => {
         eventType: "stripe_checkout_created",
         sessionId: req.sessionID || null,
         details: { userId: user.id, type: "subscription", planId, interval: "year", sessionStripeId: session.id },
+      });
+
+      return res.json({ url: session.url });
+    }
+
+    if (type === 'credits') {
+      const { packId } = validation.data;
+      if (!packId || !CREDIT_PACKS[packId]) {
+        return res.status(400).json({ error: "Invalid credit pack" });
+      }
+      const pack = CREDIT_PACKS[packId];
+
+      const session = await stripeService.createCreditCheckoutSession(
+        customerId,
+        packId,
+        pack,
+        `${baseUrl}/pricing?success=true&session_id={CHECKOUT_SESSION_ID}`,
+        `${baseUrl}/pricing?canceled=true`,
+        user.id,
+      );
+
+      await db.insert(usageEvents).values({
+        eventType: "stripe_checkout_created",
+        sessionId: req.sessionID || null,
+        details: { userId: user.id, type: "credits", packId, credits: pack.credits, sessionStripeId: session.id },
       });
 
       return res.json({ url: session.url });
@@ -246,5 +285,6 @@ router.post("/seed-products", async (req: Request, res: Response) => {
 });
 
 export const SUBSCRIPTION_PLAN_CONFIG = SUBSCRIPTION_PLANS;
+export const CREDIT_PACK_CONFIG = CREDIT_PACKS;
 
 export default router;

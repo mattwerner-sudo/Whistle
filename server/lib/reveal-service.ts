@@ -10,7 +10,7 @@ const OVERAGE_RATES: Record<string, number> = { pro: 50, team: 35, enterprise: 2
 
 export interface RevealResult {
   status: "ok";
-  source: "cached" | "subscription" | "overage" | "trial";
+  source: "cached" | "subscription" | "overage" | "trial" | "credits";
   email: string | null;
   phone: string | null;
   chargedCredits: number;
@@ -101,13 +101,17 @@ export async function revealContact(
     // Free trial: unlimited reveals scoped to the user's single chosen school.
     source = "trial";
     chargedCredits = 0;
+  } else if ((user.creditsBalance ?? 0) > 0) {
+    // Prepaid credit pack: spend one credit per reveal.
+    source = "credits";
+    chargedCredits = 1;
   } else {
     return {
       status: "error",
       code: "out_of_quota",
       message: user.trialSchoolId
-        ? "Your free preview covers one school. Subscribe to reveal contacts everywhere."
-        : "An active subscription is required to reveal contacts.",
+        ? "Your free preview covers one school. Add credits or subscribe to reveal contacts everywhere."
+        : "You're out of reveals. Buy a credit pack or subscribe to reveal contacts.",
       upgradeRequired: true,
     };
   }
@@ -188,6 +192,17 @@ export async function revealContact(
         // Overage has no cap to enforce — Stripe was already metered above.
         await tx.update(users).set({ creditsUsedThisPeriod: sql`${users.creditsUsedThisPeriod} + 1` }).where(eq(users.id, userId));
         await tx.insert(creditTransactions).values({ userId, amount: -1, reason: "reveal_overage" });
+      } else if (source === "credits") {
+        // Spend one prepaid credit, guarded so two concurrent reveals can't
+        // drive the balance negative: the decrement only applies while balance
+        // is still positive; if no row matches, the pack was just exhausted.
+        const spent = await tx
+          .update(users)
+          .set({ creditsBalance: sql`${users.creditsBalance} - 1` })
+          .where(and(eq(users.id, userId), sql`coalesce(${users.creditsBalance}, 0) > 0`))
+          .returning({ id: users.id });
+        if (spent.length === 0) throw new AllowanceExhausted();
+        await tx.insert(creditTransactions).values({ userId, amount: -1, reason: "reveal_credit_pack" });
       }
 
       await tx.insert(usageEvents).values({

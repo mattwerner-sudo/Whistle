@@ -262,11 +262,11 @@ try {
   }
 
   // --- 6. Prepaid credit balance no longer grants reveals (PAYG removed) ---
-  // Legacy users may still carry a creditsBalance from the old prepaid model.
-  // The reveal path deliberately ignores it: without an active subscription
-  // the reveal is refused, the balance is untouched, and no ledger row is
-  // written. Guards against zombie prepaid logic returning.
-  console.log("\nlegacy prepaid balance without a subscription is refused:");
+  // Prepaid credit packs (self-serve, one-time): a user with a positive
+  // creditsBalance and no subscription reveals via the "credits" source —
+  // one credit is spent per reveal, the balance decrements, and a ledger row
+  // records the spend. Never meters Stripe (already paid at purchase).
+  console.log("\nprepaid credit balance without a subscription reveals via credits:");
   {
     const userId = await makeUser({
       subscriptionStatus: "inactive",
@@ -278,16 +278,35 @@ try {
     });
     const { deps, calls } = fakeDeps();
     const r = await revealContact({ userId, staffId }, deps);
-    check("is refused", r.status === "error");
-    check("refusal code is out_of_quota", r.status === "error" && r.code === "out_of_quota");
+    check("succeeds", r.status === "ok");
+    check("source is credits", r.status === "ok" && r.source === "credits");
+    check("reveals the real email", r.status === "ok" && !!r.email);
     check("never meters Stripe", calls.length === 0);
     const [u] = await db.select().from(users).where(eq(users.id, userId));
-    check("prepaid balance is untouched", (u?.creditsBalance ?? 0) === 3);
+    check("balance decremented by one", (u?.creditsBalance ?? 0) === 2);
     const txns = await db
       .select()
       .from(creditTransactions)
       .where(eq(creditTransactions.userId, userId));
-    check("writes no credit transaction", txns.length === 0);
+    check("writes one spend ledger row", txns.length === 1 && txns[0].amount === -1);
+  }
+
+  // Exhausted prepaid balance (0) and no subscription -> refused.
+  console.log("\nzero credit balance without a subscription is refused:");
+  {
+    const userId = await makeUser({
+      subscriptionStatus: "inactive",
+      subscriptionTier: null,
+      monthlyCreditsAllocation: 0,
+      creditsUsedThisPeriod: 0,
+      creditsBalance: 0,
+      stripeCustomerId: "cus_test_zero_credits",
+    });
+    const { deps, calls } = fakeDeps();
+    const r = await revealContact({ userId, staffId }, deps);
+    check("is refused", r.status === "error");
+    check("refusal code is out_of_quota", r.status === "error" && r.code === "out_of_quota");
+    check("never meters Stripe", calls.length === 0);
   }
 } finally {
   await cleanup();
