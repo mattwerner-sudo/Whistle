@@ -189,14 +189,26 @@ export default function Landing() {
               and staff across 225+ Division I athletic departments — extracted from
               official staff directories and expanding toward all 1,100+ NCAA schools.
             </p>
-            <div className="flex items-center justify-center gap-4">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link href="/pricing">
                 <Button size="lg" className="gap-2" data-testid="button-hero-cta">
                   Get Started
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </Link>
+              <Button
+                size="lg"
+                variant="outline"
+                className="gap-2"
+                onClick={() => { window.location.href = 'https://buy.stripe.com/8x228javs36Ib0D5jbbbG00'; }}
+                data-testid="button-hero-pilot"
+              >
+                Order a $399 pilot list
+              </Button>
             </div>
+            <p className="text-sm text-muted-foreground mt-3">
+              No subscription — we build a custom verified contact list for your ICP, delivered in 2 business days.
+            </p>
           </div>
         </div>
       </section>
