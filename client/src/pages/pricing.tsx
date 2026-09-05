@@ -245,6 +245,30 @@ export default function Pricing() {
           </p>
         </div>
 
+        {/* Done-for-you pilot — the lowest-friction paid entry, shown first. */}
+        <Card className="mb-10 border-primary/40 bg-primary/5" data-testid="card-pilot">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 p-6">
+            <div className="max-w-2xl">
+              <Badge variant="secondary" className="mb-2">Start here — no subscription</Badge>
+              <h2 className="text-2xl font-semibold">Athletics Prospect Intelligence Pilot</h2>
+              <p className="text-muted-foreground mt-1">
+                Just want the list? Tell us the titles and conferences you sell to, and we build a custom, verified
+                contact list across 340+ NCAA athletic departments — delivered as a CSV within 2 business days.
+              </p>
+            </div>
+            <div className="flex flex-col items-start md:items-end gap-2 shrink-0">
+              <div><span className="text-3xl font-bold">$399</span> <span className="text-sm text-muted-foreground">one-time</span></div>
+              <Button
+                size="lg"
+                onClick={() => { window.location.href = 'https://buy.stripe.com/8x228javs36Ib0D5jbbbG00'; }}
+                data-testid="button-pilot"
+              >
+                Order a pilot list
+              </Button>
+            </div>
+          </div>
+        </Card>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
           {TIERS.map((tier) => {
             const isCurrent = tier.id === currentTier && hasActiveSub;
