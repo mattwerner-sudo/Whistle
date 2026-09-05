@@ -112,6 +112,12 @@ export interface IStorage {
   deleteSchoolAlias(id: number): Promise<void>;
 }
 
+// Loose equality for detecting a title that just echoes the name
+// (case-insensitive, whitespace/punctuation-insensitive).
+function normalizeForCompare(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "").trim();
+}
+
 export class DatabaseStorage implements IStorage {
   async getSchoolDirectory(schoolId: string): Promise<SchoolDirectory | undefined> {
     const [directory] = await db
@@ -515,6 +521,15 @@ export class DatabaseStorage implements IStorage {
     const allowed = members.filter((m) => !m.email || !suppressed.has(m.email.toLowerCase()));
     if (allowed.length < members.length) {
       console.log(`[OptOut] Skipped ${members.length - allowed.length} suppressed contact(s) during ingest`);
+    }
+
+    // A title that merely echoes the person's name is a parser miss, not a real
+    // title — drop it so the record shows an honest empty title rather than a
+    // duplicate. Applied at ingest so every extractor path is covered.
+    for (const m of allowed) {
+      if (m.title && m.name && normalizeForCompare(m.title) === normalizeForCompare(m.name)) {
+        m.title = null;
+      }
     }
 
     const batchSize = 50;
