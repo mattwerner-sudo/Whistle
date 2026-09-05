@@ -8,6 +8,17 @@ export interface DirectoryOverride {
 }
 
 export const KNOWN_DIRECTORY_URLS: Record<string, DirectoryOverride> = {
+  // NESCAC (verified 2026-09-01)
+  "amherst": { directoryUrl: "https://athletics.amherst.edu/staff-directory", athleticsBaseUrl: "https://athletics.amherst.edu", lastVerified: "2026-09-01" },
+  "bates": { directoryUrl: "https://gobatesbobcats.com/staff-directory", athleticsBaseUrl: "https://gobatesbobcats.com", lastVerified: "2026-09-01" },
+  "bowdoin": { directoryUrl: "https://athletics.bowdoin.edu/staff-directory", athleticsBaseUrl: "https://athletics.bowdoin.edu", lastVerified: "2026-09-01" },
+  "colby": { directoryUrl: "https://colbyathletics.com/staff-directory", athleticsBaseUrl: "https://colbyathletics.com", lastVerified: "2026-09-01" },
+  "connecticut-col": { directoryUrl: "https://camelathletics.com/staff-directory", athleticsBaseUrl: "https://camelathletics.com", lastVerified: "2026-09-01" },
+  "middlebury": { directoryUrl: "https://athletics.middlebury.edu/staff-directory", athleticsBaseUrl: "https://athletics.middlebury.edu", lastVerified: "2026-09-01" },
+  "trinity-ct": { directoryUrl: "https://bantamsports.com/staff-directory", athleticsBaseUrl: "https://bantamsports.com", lastVerified: "2026-09-01" },
+  "tufts": { directoryUrl: "https://gotuftsjumbos.com/staff-directory", athleticsBaseUrl: "https://gotuftsjumbos.com", lastVerified: "2026-09-01" },
+  "wesleyan-ct": { directoryUrl: "https://athletics.wesleyan.edu/staff-directory", athleticsBaseUrl: "https://athletics.wesleyan.edu", lastVerified: "2026-09-01" },
+  "williams": { directoryUrl: "https://ephsports.williams.edu/staff-directory", athleticsBaseUrl: "https://ephsports.williams.edu", lastVerified: "2026-09-01" },
   "brigham-young": {
     directoryUrl: "https://byucougars.com/staff-directory",
     athleticsBaseUrl: "https://byucougars.com",
