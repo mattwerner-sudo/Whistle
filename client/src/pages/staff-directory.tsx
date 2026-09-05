@@ -39,7 +39,7 @@ import {
 
 type MaskedStaff = StaffMember & { schoolName?: string; schoolLogo?: string; isRevealed?: boolean; emailRevealed?: boolean; phoneRevealed?: boolean };
 
-function useRevealMutation() {
+function useRevealMutation(onRevealed?: (data: { email: string | null; phone: string | null }) => void) {
   const { toast } = useToast();
   return useMutation({
     mutationFn: async (staffId: number) => {
@@ -50,6 +50,11 @@ function useRevealMutation() {
       queryClient.invalidateQueries({ queryKey: ['/api/staff/schools'] });
       queryClient.invalidateQueries({ queryKey: ['/api/billing/account'] });
       queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
+      // Hand the freshly revealed values back to the caller so an open detail
+      // view can swap masked → real immediately, without waiting on a refetch.
+      if (data?.status === 'ok' || data?.email || data?.phone) {
+        onRevealed?.({ email: data?.email ?? null, phone: data?.phone ?? null });
+      }
       const src = data?.source;
       const desc =
         src === 'cached' ? 'Re-reveal within 90 days — free.' :
@@ -88,8 +93,8 @@ function useRevealMutation() {
   });
 }
 
-function RevealButton({ staffId, size = 'sm', variant = 'default', className = '', hasContact = true }: { staffId: number; size?: 'sm' | 'default' | 'icon'; variant?: 'default' | 'outline' | 'ghost'; className?: string; hasContact?: boolean }) {
-  const mutation = useRevealMutation();
+function RevealButton({ staffId, size = 'sm', variant = 'default', className = '', hasContact = true, onRevealed }: { staffId: number; size?: 'sm' | 'default' | 'icon'; variant?: 'default' | 'outline' | 'ghost'; className?: string; hasContact?: boolean; onRevealed?: (data: { email: string | null; phone: string | null }) => void }) {
+  const mutation = useRevealMutation(onRevealed);
   // ~20% of records come from directories that publish no email or phone for
   // that person. Offering a Reveal button there is a dead end — show the
   // truth instead of an error after the click.
@@ -264,9 +269,17 @@ function ExpandedContactDialog({
   networkConnectionName?: string | null;
 }) {
   const { toast } = useToast();
-  
+  // Local reveal state so the values swap masked → real the instant the API
+  // responds, instead of waiting on a background refetch of the list query.
+  const [revealed, setRevealed] = useState<{ email: string | null; phone: string | null } | null>(null);
+  useEffect(() => { setRevealed(null); }, [member?.id]);
+
   if (!member) return null;
-  
+
+  const isRevealed = member.isRevealed || revealed !== null;
+  const revealedEmail = revealed?.email ?? member.email;
+  const revealedPhone = revealed?.phone ?? member.phone;
+
   const initials = member.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
   const confidence = member.confidence as { overall: number } | null;
   
@@ -317,64 +330,66 @@ function ExpandedContactDialog({
           <div className="grid gap-3">
             <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
               <div className="flex items-center gap-3">
-                {member.isRevealed ? <Mail className="h-5 w-5 text-primary" /> : <Lock className="h-5 w-5 text-muted-foreground" />}
+                {isRevealed ? <Mail className="h-5 w-5 text-primary" /> : <Lock className="h-5 w-5 text-muted-foreground" />}
                 <div>
                   <p className="text-xs text-muted-foreground">Email</p>
-                  {member.isRevealed ? (
+                  {isRevealed ? (
                     <a
-                      href={`mailto:${member.email}`}
+                      href={`mailto:${revealedEmail}`}
                       className="text-sm font-medium text-primary hover:underline"
                       data-testid="link-expanded-email"
                     >
-                      {member.email}
+                      {revealedEmail}
                     </a>
                   ) : (
-                    <span className="text-sm font-medium text-muted-foreground" data-testid="link-expanded-email">{member.email}</span>
+                    <span className="text-sm font-medium text-muted-foreground" data-testid="link-expanded-email">{revealedEmail}</span>
                   )}
                 </div>
               </div>
-              {member.isRevealed ? (
+              {isRevealed ? (
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => copyToClipboard(member.email!, 'Email')}
+                  onClick={() => copyToClipboard(revealedEmail!, 'Email')}
                   data-testid="button-copy-email"
                 >
                   <Copy className="h-4 w-4" />
                 </Button>
               ) : (
-                <RevealButton staffId={member.id} variant="default" hasContact={member.email != null || member.phone != null} />
+                <RevealButton staffId={member.id} variant="default" hasContact={member.email != null || member.phone != null} onRevealed={setRevealed} />
               )}
             </div>
-            
+
             {member.phone && (
               <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                 <div className="flex items-center gap-3">
-                  {member.isRevealed ? <Phone className="h-5 w-5 text-muted-foreground" /> : <Lock className="h-5 w-5 text-muted-foreground" />}
+                  {isRevealed ? <Phone className="h-5 w-5 text-muted-foreground" /> : <Lock className="h-5 w-5 text-muted-foreground" />}
                   <div>
                     <p className="text-xs text-muted-foreground">Phone</p>
-                    {member.isRevealed ? (
+                    {isRevealed ? (
                       <a
-                        href={`tel:${member.phone}`}
+                        href={`tel:${revealedPhone}`}
                         className="text-sm font-medium hover:underline"
                         data-testid="link-expanded-phone"
                       >
-                        {member.phone}
+                        {revealedPhone}
                       </a>
                     ) : (
-                      <span className="text-sm font-medium text-muted-foreground" data-testid="link-expanded-phone">{member.phone}</span>
+                      <span className="text-sm font-medium text-muted-foreground" data-testid="link-expanded-phone">{revealedPhone}</span>
                     )}
                   </div>
                 </div>
-                {member.isRevealed && (
+                {isRevealed ? (
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => copyToClipboard(member.phone!, 'Phone')}
+                    onClick={() => copyToClipboard(revealedPhone!, 'Phone')}
                     data-testid="button-copy-phone"
                   >
                     <Copy className="h-4 w-4" />
                   </Button>
+                ) : (
+                  <RevealButton staffId={member.id} variant="default" hasContact={member.email != null || member.phone != null} onRevealed={setRevealed} />
                 )}
               </div>
             )}
@@ -449,12 +464,12 @@ function ExpandedContactDialog({
         </div>
         
         <DialogFooter className="mt-4 gap-2">
-          {member.isRevealed ? (
+          {isRevealed ? (
             <>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => {
-                  const text = `${member.name} <${member.email}>`;
+                  const text = `${member.name} <${revealedEmail}>`;
                   copyToClipboard(text, 'Contact');
                 }}
                 className="gap-2"
@@ -463,7 +478,7 @@ function ExpandedContactDialog({
                 <Copy className="h-4 w-4" />
                 Copy for Email
               </Button>
-              <a href={`mailto:${member.email}`}>
+              <a href={`mailto:${revealedEmail}`}>
                 <Button className="gap-2" data-testid="button-send-email">
                   <Mail className="h-4 w-4" />
                   Send Email
@@ -471,7 +486,7 @@ function ExpandedContactDialog({
               </a>
             </>
           ) : (
-            <RevealButton staffId={member.id} variant="default" hasContact={member.email != null || member.phone != null} />
+            <RevealButton staffId={member.id} variant="default" hasContact={member.email != null || member.phone != null} onRevealed={setRevealed} />
           )}
         </DialogFooter>
       </DialogContent>
