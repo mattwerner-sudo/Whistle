@@ -1,0 +1,24 @@
+{
+  "name": "gowhistle-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Whistle — collegiate athletics sales intelligence. Search staff, schools, and hiring signals across NCAA athletic departments from any MCP client (Claude, Cursor, etc.).",
+  "keywords": ["mcp", "model-context-protocol", "college-athletics", "sales-intelligence", "ncaa", "whistle"],
+  "homepage": "https://gowhistle.io",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "gowhistle-mcp": "dist/index.js"
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}
