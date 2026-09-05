@@ -1,0 +1,25 @@
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required:
+      - whistleApiKey
+    properties:
+      whistleApiKey:
+        type: string
+        title: Whistle API Key
+        description: Your Whistle API key (sk_live_...). Get one at https://gowhistle.io
+      whistleApiBase:
+        type: string
+        title: API Base URL
+        default: https://gowhistle.io
+        description: Override the Whistle API base URL (rarely needed).
+  commandFunction: |
+    (config) => ({
+      command: 'npx',
+      args: ['-y', 'gowhistle-mcp'],
+      env: {
+        WHISTLE_API_KEY: config.whistleApiKey,
+        WHISTLE_API_BASE: config.whistleApiBase || 'https://gowhistle.io'
+      }
+    })

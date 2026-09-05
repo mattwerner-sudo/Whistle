@@ -1,0 +1,29 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "name": "io.gowhistle/mcp",
+  "description": "Collegiate athletics sales intelligence — search verified staff contacts, school profiles, and hiring signals across NCAA athletic departments.",
+  "version": "1.0.0",
+  "homepage": "https://gowhistle.io",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "gowhistle-mcp",
+      "version": "1.0.0",
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        {
+          "name": "WHISTLE_API_KEY",
+          "description": "Your Whistle API key (sk_live_...)",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "WHISTLE_API_BASE",
+          "description": "Override the Whistle API base URL",
+          "isRequired": false,
+          "default": "https://gowhistle.io"
+        }
+      ]
+    }
+  ]
+}
